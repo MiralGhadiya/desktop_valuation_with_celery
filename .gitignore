@@ -1,0 +1,90 @@
+# ======================
+# Python / Virtual Envs
+# ======================
+venv/
+.venv/
+env/
+ENV/
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ======================
+# Environment / Secrets
+# ======================
+.env
+.env.*
+*.key
+*.pem
+*.secret
+
+# ======================
+# Database / Runtime / Generated
+# ======================
+generated_reports/
+uploads/
+backup.sql
+*.zip
+
+*.sqlite3
+*.db
+
+# ======================
+# Celery
+# ======================
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat-schedule.bak
+celerybeat-schedule.dat
+celerybeat-schedule.dir
+
+# ======================
+# Alembic
+# ======================
+alembic/versions/__pycache__/
+
+# ======================
+# Logs
+# ======================
+*.log
+logs/
+
+# ======================
+# IDE / Editor
+# ======================
+.vscode/
+.idea/
+*.code-workspace
+
+# ======================
+# OS Files
+# ======================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ======================
+# Test / Coverage
+# ======================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ======================
+# Jupyter
+# ======================
+.ipynb_checkpoints/
+
+# ======================
+# Build / Dist
+# ======================
+build/
+dist/
+*.egg-info/
+
+# ======================
+# LLM / Cache
+# ======================
+.cache/

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Desktop Valuation Opinion</title>
+
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 30px 45px;
+    color: #222;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 24px;
+    margin-bottom: 4px;
+    color: #00332B;
+    letter-spacing: 0.4px;
+  }
+
+  .sub-title {
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 25px;
+    font-style: italic;
+  }
+
+  .section-title {
+    margin-top: 28px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #00332B;
+    border-bottom: 2px solid #00332B;
+    text-transform: uppercase;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 18px;
+  }
+
+  table th,
+  table td {
+    border: 1px solid #dcdcdc;
+    padding: 8px 10px;
+    vertical-align: top;
+  }
+
+  table th {
+    width: 35%;
+    background-color: #f3f6f5;
+    font-weight: bold;
+    color: #00332B;
+  }
+
+  ul {
+    margin-top: 6px;
+    padding-left: 18px;
+  }
+
+  li {
+    margin-bottom: 6px;
+  }
+
+  .map-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 15px;
+  }
+
+  .map-box img {
+    width: 100%;
+    border: 1px solid #ccc;
+  }
+
+  .muted {
+    font-size: 11px;
+    color: #555;
+  }
+</style>
+</head>
+
+<body>
+
+<h1>DESKTOP VALUATION OPINION</h1>
+<div class="sub-title">
+  (For Market Value Cross-Check / Reference Purpose Only)
+</div>
+
+<!-- ================= PROPERTY DETAILS ================= -->
+<div class="section-title">Property Details</div>
+<table>
+  <tr><th>Name of Owner</th><td>{{ property_details.name_of_owner }}</td></tr>
+  <tr><th>Project Name</th><td>{{ property_details.project_name }}</td></tr>
+  <tr><th>Property Address</th><td>{{ property_details.property_address }}</td></tr>
+  <tr><th>Property Type</th><td>{{ property_details.property_type }}</td></tr>
+  <tr><th>Configuration</th><td>{{ property_details.configuration }}</td></tr>
+  <tr><th>Carpet Area</th><td>{{ property_details.carpet_area_sqft }} sq.ft</td></tr>
+  <tr><th>Construction Status</th><td>{{ property_details.construction_status }}</td></tr>
+  <tr><th>Purpose of Report</th><td>{{ property_details.purpose_of_report }}</td></tr>
+  <tr><th>Type of Valuation</th><td>{{ property_details.type_of_valuation }}</td></tr>
+  <tr><th>Inspection</th><td>{{ property_details.inspection }}</td></tr>
+  <tr><th>Confidentiality</th><td>{{ property_details.confidentiality }}</td></tr>
+</table>
+
+<!-- ================= LOCATION & IDENTIFICATION ================= -->
+<div class="section-title">Location & Identification</div>
+<table>
+  <tr><th>Micro Location</th><td>{{ location_identification.micro_location }}</td></tr>
+  <tr><th>Municipal Authority</th><td>{{ location_identification.municipal_authority }}</td></tr>
+  <tr><th>Connectivity</th><td>{{ location_identification.connectivity }}</td></tr>
+  <tr><th>Social Infrastructure</th><td>{{ location_identification.social_infrastructure }}</td></tr>
+  <tr><th>Surroundings</th><td>{{ location_identification.surroundings }}</td></tr>
+  <tr><th>Zoning</th><td>{{ location_identification.zoning }}</td></tr>
+  <tr><th>Demand Profile</th><td>{{ location_identification.demand_profile }}</td></tr>
+</table>
+
+<!-- ================= PROJECT PROFILE ================= -->
+<div class="section-title">Project Profile</div>
+<table>
+  <tr><th>Developer</th><td>{{ project_profile.developer }}</td></tr>
+  <tr><th>Project Positioning</th><td>{{ project_profile.project_positioning }}</td></tr>
+  <tr><th>Towers</th><td>{{ project_profile.towers }}</td></tr>
+  <tr><th>Amenities</th><td>{{ project_profile.amenities }}</td></tr>
+  <tr><th>Market Perception</th><td>{{ project_profile.market_perception }}</td></tr>
+</table>
+
+<!-- ================= AREA DETAILS ================= -->
+<div class="section-title">Area Details</div>
+<table>
+  <tr><th>Carpet Area</th><td>{{ area_details.carpet_area_sqft }} sq.ft</td></tr>
+  <tr><th>Layout</th><td>{{ area_details.layout }}</td></tr>
+  <tr><th>Floor Plan</th><td>{{ area_details.floor_plan }}</td></tr>
+  <tr><th>Current Usage</th><td>{{ area_details.current_usage }}</td></tr>
+</table>
+
+<!-- ================= MARKET BENCHMARK ================= -->
+<div class="section-title">Market Benchmark</div>
+<table>
+  <thead>
+    <tr>
+      <th>Locality</th>
+      <th>Rate (₹ / sq.ft)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in market_benchmark %}
+    <tr>
+      <td>{{ c.address }}</td>
+      <td>{{ c.sale_price }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ================= INDICATIVE MARKET VALUE ================= -->
+<div class="section-title">Indicative Market Value</div>
+<table>
+  <tr><th>Area Considered</th><td>{{ indicative_market_value.area_considered_sqft }} sq.ft</td></tr>
+  <tr><th>Adopted Market Rate</th><td>₹ {{ indicative_market_value.adopted_market_rate }} / sq.ft</td></tr>
+  <tr><th>Indicative Market Value</th><td>₹ {{ indicative_market_value.indicative_value }}</td></tr>
+</table>
+
+<!-- ================= VALUE RANGE ================= -->
+<div class="section-title">Value Range (Market Cross-Check)</div>
+<table>
+  <tr><th>Conservative</th><td>₹ {{ value_range.conservative }}</td></tr>
+  <tr><th>Mid-Range (Adopted)</th><td>₹ {{ value_range.mid_range }}</td></tr>
+  <tr><th>Optimistic</th><td>₹ {{ value_range.optimistic }}</td></tr>
+</table>
+
+<!-- ================= NEARBY MARKET EVIDENCE ================= -->
+<div class="section-title">Nearby Market Evidence</div>
+<ul>
+  {% for item in nearby_market_evidence %}
+  <li>{{ item }}</li>
+  {% endfor %}
+</ul>
+
+<!-- ================= FUTURE OUTLOOK ================= -->
+<div class="section-title">Future Outlook (5-Year Indication)</div>
+<table>
+  <thead>
+    <tr>
+      <th>Year</th>
+      <th>Expected Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in future_outlook %}
+    <tr>
+      <td>{{ row.year }}</td>
+      <td>₹ {{ row.expected_value }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ================= SWOT ================= -->
+<div class="section-title">SWOT Analysis</div>
+
+<h3>Strengths</h3>
+<ul>{% for i in swot_analysis.strengths %}<li>{{ i }}</li>{% endfor %}</ul>
+
+<h3>Weaknesses</h3>
+<ul>{% for i in swot_analysis.weaknesses %}<li>{{ i }}</li>{% endfor %}</ul>
+
+<h3>Opportunities</h3>
+<ul>{% for i in swot_analysis.opportunities %}<li>{{ i }}</li>{% endfor %}</ul>
+
+<h3>Threats</h3>
+<ul>{% for i in swot_analysis.threats %}<li>{{ i }}</li>{% endfor %}</ul>
+
+<!-- ================= PROPERTY LOCATION MAPS ================= -->
+<div class="section-title">Property Location Maps</div>
+
+{% if property_location %}
+<div class="map-grid">
+  <div class="map-box"><img src="{{ property_location.maps.roadmap }}"></div>
+  <div class="map-box"><img src="{{ property_location.maps.satellite }}"></div>
+  <div class="map-box"><img src="{{ property_location.maps.terrain }}"></div>
+  <div class="map-box"><img src="{{ property_location.maps.hybrid }}"></div>
+</div>
+{% else %}
+<p class="muted">Map not available.</p>
+{% endif %}
+
+<!-- ================= DISCLAIMER ================= -->
+<div class="section-title">Important Notes & Disclaimers</div>
+<ol>
+  {% for d in disclaimer %}
+  <li>{{ d }}</li>
+  {% endfor %}
+</ol>
+
+<!-- ================= PREPARED BY ================= -->
+<div class="section-title">Prepared By</div>
+<p>
+  <strong>Earth Engineers</strong><br>
+  Desktop Valuation & Advisory
+</p>
+
+</body>
+</html>

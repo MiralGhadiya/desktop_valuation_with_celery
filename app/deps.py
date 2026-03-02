@@ -16,6 +16,50 @@ from app.utils.logger_config import app_logger as logger
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
 
 
+def require_management(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    payload = decode_token(token)
+
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    sub = payload.get("sub")
+    role = payload.get("role")
+
+    if not sub or not role:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    try:
+        entity_id = UUID(sub)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    if role == "admin":
+        admin = db.query(models.User).filter(
+            models.User.id == entity_id,
+            models.User.is_superuser == True
+        ).first()
+
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin not found")
+
+        return {"type": "admin", "data": admin}
+
+    if role == "staff":
+        staff = db.query(Staff).filter(
+            Staff.id == entity_id
+        ).first()
+
+        if not staff:
+            raise HTTPException(status_code=404, detail="Staff not found")
+
+        return {"type": "staff", "data": staff}
+
+    raise HTTPException(status_code=403, detail="Invalid role")
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),

@@ -195,7 +195,11 @@ def create_user(
         raise HTTPException(400, "Mobile number already in use")
 
     # Detect country from mobile
-    dial_code, country_code = get_country_from_mobile(data.mobile_number)
+    # dial_code, country_code = get_country_from_mobile(data.mobile_number)
+    try:
+        dial_code, country_code = get_country_from_mobile(data.mobile_number)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     country = country_service.get_country_by_dial_code(db, dial_code)
     if not country:
@@ -302,7 +306,11 @@ def update_user(
 
         user.mobile_number = data.mobile_number
 
-        dial_code, country_code = get_country_from_mobile(data.mobile_number)
+        # dial_code, country_code = get_country_from_mobile(data.mobile_number)
+        try:
+            dial_code, country_code = get_country_from_mobile(data.mobile_number)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         country = country_service.get_country_by_dial_code(db, dial_code)
         if not country:

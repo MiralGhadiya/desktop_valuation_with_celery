@@ -1,14 +1,15 @@
 #app/routes/admin/auth.py
 
+from uuid import UUID
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models import User, Staff
 from app.services import auth_service
-from app.schemas.admin import AdminTokenResponse
 from app.schemas import AdminLogin, AdminProfile, ChangePassword
+from app.schemas.management import ManagementProfile
 
-from app.deps import get_db, require_superuser
+from app.deps import get_db, require_management, require_superuser
 from app.utils.response import APIResponse, success_response
 from app.auth import verify_password, create_access_token, hash_password
 
@@ -104,7 +105,7 @@ def management_login(
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         access_token = create_access_token(
-            {"sub": str(staff.user_id), "role": "staff"}
+            {"sub": str(staff.id), "role": "staff"}
         )
 
         return success_response(
@@ -129,9 +130,48 @@ def management_login(
             message="Staff login successful"
         )
 
-    # 3️⃣ If neither
     raise HTTPException(status_code=403, detail="Access denied")
     
+
+@router.get("/management/me")
+def management_me(
+    current = Depends(require_management),
+):
+
+    if current["type"] == "admin":
+        admin = current["data"]
+
+        return success_response(
+            data={
+                "type": "admin",
+                "id": admin.id,
+                "email": admin.email,
+                "username": admin.username,
+            },
+            message="Admin profile fetched successfully"
+        )
+
+    if current["type"] == "staff":
+        staff = current["data"]
+
+        return success_response(
+            data={
+                "type": "staff",
+                "id": staff.id,
+                "name": staff.name,
+                "email": staff.email,
+                "role": staff.role,
+                "accesses": {
+                    "can_access_user": staff.can_access_user,
+                    "can_access_staff": staff.can_access_staff,
+                    "can_access_dashboard": staff.can_access_dashboard,
+                    "can_access_reports": staff.can_access_reports,
+                    "can_access_subscriptions_plans": staff.can_access_subscriptions_plans,
+                }
+            },
+            message="Staff profile fetched successfully"
+        )
+
 
 @router.get("/me", response_model=APIResponse[AdminProfile])
 def admin_me(

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timedelta, timezone
 
-from app.deps import get_db, require_superuser
+from app.deps import get_db, require_superuser, require_management
 
 from app.models import User
 from app.models.feedback import Feedback
@@ -27,7 +27,7 @@ router = APIRouter(
 @router.get("/overview", response_model=APIResponse[dict])
 def dashboard_overview(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         logger.info("Admin dashboard: overview requested")
@@ -71,7 +71,7 @@ def dashboard_overview(
 @router.get("/users", response_model=APIResponse[dict])
 def dashboard_users(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         logger.info("Admin dashboard: users stats requested")
@@ -112,7 +112,7 @@ def dashboard_users(
 @router.get("/user-registrations-by-year", response_model=APIResponse[dict])
 def user_registrations_by_last_five_years(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         # Get the current year (e.g., 2026)
@@ -156,7 +156,7 @@ def user_registrations_by_last_five_years(
 @router.get("/subscriptions", response_model=APIResponse[list])
 def dashboard_subscriptions_country_wise(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         logger.info("Admin dashboard: subscriptions breakdown requested")
@@ -216,7 +216,7 @@ def dashboard_subscriptions_country_wise(
 @router.get("/valuations", response_model=APIResponse[dict])
 def dashboard_valuations(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         logger.info("Admin dashboard: valuation stats requested")
@@ -255,7 +255,7 @@ def dashboard_valuations(
 @router.get("/countries", response_model=APIResponse[dict])
 def dashboard_countries(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     try:
         logger.info("Admin dashboard: country-wise stats requested")
@@ -302,7 +302,7 @@ def dashboard_countries(
 @router.get("/feedback", response_model=APIResponse[dict])
 def feedback_stats(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     total = db.query(func.count(Feedback.id)).scalar()
 

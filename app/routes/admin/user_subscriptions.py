@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.deps import get_db, require_superuser, pagination_params
+from app.deps import get_db, require_management, require_superuser, pagination_params
 
 from app.models import User
 from app.models.subscription import SubscriptionPlan, UserSubscription
@@ -65,7 +65,7 @@ class UserSubscriptionFilters:
 @router.get("/user-subscriptions", response_model=APIResponse[PaginatedResponse[UserSubscriptionResponse]])
 def list_all_user_subscriptions(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     params: dict = Depends(pagination_params),
     filters: UserSubscriptionFilters = Depends(),
     
@@ -195,7 +195,7 @@ def list_all_user_subscriptions(
 def get_user_subscriptions(
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     
     params: dict = Depends(pagination_params),
     payment_status: Optional[str] = Query(None),
@@ -299,7 +299,7 @@ def assign_subscription_to_user(
     user_id: UUID,
     data: AssignSubscription,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(
         f"Admin assigning subscription user_id={user_id} "
@@ -369,7 +369,7 @@ def update_user_subscription(
     subscription_id: UUID,
     data: UpdateSubscription,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin updating subscription sub_id={subscription_id}")
 
@@ -417,7 +417,7 @@ def update_user_subscription(
 def cancel_subscription(
     subscription_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin cancelling subscription sub_id={subscription_id}")
 
@@ -450,7 +450,7 @@ def cancel_subscription(
 def update_subscription_duration(
     data: UpdateSubscriptionDuration,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     if data.duration_days <= 0:
         raise HTTPException(400, "Duration must be greater than 0")

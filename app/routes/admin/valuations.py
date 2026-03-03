@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.deps import get_db, require_superuser
+from app.deps import get_db, require_superuser, require_management
 
 from app.models import User
 from app.models.valuation import ValuationReport
@@ -32,7 +32,7 @@ router = APIRouter(
 @router.get("/valuations", response_model=APIResponse[PaginatedResponse[ValuationResponse]])
 def list_valuations(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     
     params: dict = Depends(pagination_params),
 
@@ -133,7 +133,7 @@ def list_valuations(
 def get_valuation_details(
     valuation_id: str,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin fetching valuation valuation_id={valuation_id}")
     valuation = db.query(ValuationReport).filter(
@@ -154,7 +154,7 @@ def get_valuation_details(
 def get_user_valuations(
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     params : dict = Depends(pagination_params),
 ):
     
@@ -207,7 +207,7 @@ def get_user_valuations(
 def delete_valuation(
     valuation_id: str,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin deleting valuation valuation_id={valuation_id}")
     

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import hash_password, pwd_context
-from app.deps import pagination_params, get_db, require_superuser
+from app.deps import pagination_params, get_db, require_superuser, require_management
 
 from app.models import User, EmailVerificationToken
 from app.services import auth_service, country_service
@@ -40,7 +40,7 @@ USER_NOT_FOUND = "User not found"
 @router.get("", response_model=APIResponse[PaginatedResponse[AdminUserResponse]])
 def list_users(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_superuser),  
+    admin_user: User = Depends(require_management),  
     params: dict = Depends(pagination_params),
     is_email_verified: Optional[bool] = Query(None),
     is_superuser: Optional[bool] = Query(None),
@@ -151,7 +151,7 @@ def list_users(
 def get_user(
     user_id: UUID,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_superuser),
+    admin_user: User = Depends(require_management),
 ):
     logger.info(f"Admin fetching user user_id={user_id}")
     
@@ -173,7 +173,7 @@ def get_user(
 def create_user(
     data: AdminCreateUser,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin creating user email={data.email}")
 
@@ -244,7 +244,7 @@ def update_user(
     user_id: UUID,
     data: AdminUserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin updating user user_id={user_id}")
 
@@ -344,7 +344,7 @@ def update_user(
 def toggle_user_active(
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin toggling user active state user_id={user_id}")
     
@@ -380,7 +380,7 @@ def toggle_user_active(
 def force_logout_user(
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin forcing logout user_id={user_id}")
     
@@ -404,7 +404,7 @@ def force_logout_user(
 def verify_user_email(
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin verifying email user_id={user_id}")
     
@@ -443,7 +443,7 @@ def admin_reset_password(
     user_id: UUID,
     data: AdminResetPassword,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     logger.info(f"Admin resetting password user_id={user_id}")
     

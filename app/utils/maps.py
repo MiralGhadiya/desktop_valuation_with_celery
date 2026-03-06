@@ -83,38 +83,38 @@ def get_place_photo(address: str):
     )
         
     
-# def get_streetview_metadata(lat, lng):
-#     url = "https://maps.googleapis.com/maps/api/streetview/metadata"
+def get_streetview_metadata(lat, lng):
+    url = "https://maps.googleapis.com/maps/api/streetview/metadata"
 
-#     params = {
-#         "location": f"{lat},{lng}",
-#         "radius": 100,
-#         "source": "outdoor",
-#         "key": GOOGLE_MAPS_KEY
-#     }
+    params = {
+        "location": f"{lat},{lng}",
+        "radius": 200,
+        "source": "outdoor",
+        "key": GOOGLE_MAPS_KEY
+    }
 
-#     r = requests.get(url, params=params, timeout=10)
-#     data = r.json()
+    r = requests.get(url, params=params, timeout=10)
+    data = r.json()
 
-#     if data.get("status") != "OK":
-#         return None
+    if data.get("status") != "OK":
+        return None
 
-#     return data
+    return data
 
 
-# def build_street_view(lat, lng):
-#     base = "https://maps.googleapis.com/maps/api/streetview"
+def build_street_view(lat, lng):
+    base = "https://maps.googleapis.com/maps/api/streetview"
 
-#     return (
-#         f"{base}?"
-#         f"size=600x400"
-#         f"&location={lat},{lng}"
-#         f"&radius=100"
-#         f"&source=outdoor"
-#         f"&fov=90"
-#         f"&pitch=0"
-#         f"&key={GOOGLE_MAPS_KEY}"
-#     )
+    return (
+        f"{base}?"
+        f"size=600x400"
+        f"&location={lat},{lng}"
+        f"&radius=200"
+        f"&source=outdoor"
+        f"&fov=90"
+        f"&pitch=0"
+        f"&key={GOOGLE_MAPS_KEY}"
+    )
 
 
 def build_static_maps(lat, lng, address=None):
@@ -130,11 +130,15 @@ def build_static_maps(lat, lng, address=None):
             f"&key={GOOGLE_MAPS_KEY}"
         )
 
+    street_view = build_street_view(lat, lng)
+    place_photo = get_place_photo(address) if address else None
+
+    # fallback logic
+    photo_or_street = place_photo if place_photo else street_view
+
     return {
         "roadmap": f"{base}?{common_params(16)}&maptype=roadmap",
-        # "street_view": build_street_view(lat, lng),
-        # "satellite": f"{base}?{common_params(16)}&maptype=satellite",
         "hybrid": f"{base}?{common_params(16)}&maptype=hybrid",
         "terrain": f"{base}?{common_params(19)}&maptype=terrain",
-        "place_photo": get_place_photo(address) if address else None
+        "location_image": photo_or_street
     }

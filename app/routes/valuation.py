@@ -275,13 +275,13 @@ def get_job_status(
 
     # currency_code = country.currency_code if country else None
     
-    # currency_code = valuation.report_context.get("currency_code")
+    currency_code = valuation.report_context.get("currency_code")
 
     return {
         "status": "success",
         "valuation_id": valuation.valuation_id,
         "report_context": valuation.report_context,
-        # "currency_code": currency_code,
+        "currency_code": currency_code,
     }
 
 

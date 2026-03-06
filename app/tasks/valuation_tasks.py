@@ -5,7 +5,7 @@ import os
 import base64
 import smtplib
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 import matplotlib.pyplot as plt
 from app.celery_app import celery_app
 from app.database.db import SessionLocal
@@ -17,12 +17,28 @@ from app.llm.openai import (
     generate_valuation_report,
     generate_forecast,
     generate_swot,
-)# from app.utils.pdf_generator import render_html, generate_pdf_from_html
+)
 from app.utils.email import send_pdf_email
 from app.utils.maps import geocode_address, build_static_maps
 from app.models.subscription import UserSubscription
 
 from app.utils.logger_config import app_logger as logger
+
+
+def get_currency_from_country(db, country_code):
+    from app.models.country import Country
+
+    country = (
+        db.query(Country)
+        .filter(Country.country_code == country_code)
+        .first()
+    )
+
+    if not country:
+        return "USD"
+
+    return country.currency_code
+
 
 @celery_app.task(
     bind=True,
@@ -53,9 +69,16 @@ def process_valuation_job(self, job_id: str):
         plan_name = subscription.plan.name.upper()
         
         core = generate_valuation_report(user_input, plan=plan_name)
+        
+        if plan_name != "BASIC":
+            forecast = generate_forecast(core)
+            core["forecast"] = forecast
+        else:
+            core["forecast"] = None
+            
 
-        forecast = generate_forecast(core)
-        core["forecast"] = forecast
+        # forecast = generate_forecast(core)
+        # core["forecast"] = forecast
 
         if plan_name == "PRO":
             core["swot_analysis"] = generate_swot(core)
@@ -69,54 +92,68 @@ def process_valuation_job(self, job_id: str):
 
         ai_json = core
         ai_json["valuation_validity_days"] = 60
-        valuation_id = f"DV-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid4())[:8]}"
+        valuation_id = f"DV-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(uuid4())[:8]}"
                 
         print("AI JSON RESPONSE:", ai_json)
         
         print("FORECAST FROM AI:", ai_json.get("forecast"))
-
+    
         context = build_report_context(ai_json, user_input, valuation_id=valuation_id)
         
-        years = [item["year"] for item in context["future_outlook"]]
-        values = [item["expected_value"] for item in context["future_outlook"]]
+        if plan_name != "BASIC" and context["future_outlook"]:
+            years = [item["year"] for item in context["future_outlook"]]
+            values = [item["expected_value"] for item in context["future_outlook"]]
 
-        plt.figure(figsize=(6, 4))
-        plt.plot(years, values, marker='o')
+            plt.figure(figsize=(6, 4))
+            plt.plot(years, values, marker='o')
 
-        for i, txt in enumerate(context["future_outlook"]):
-            plt.annotate(
-                f"{txt['growth_percent']}%",
-                (years[i], values[i]),
-                textcoords="offset points",
-                xytext=(0,10),
-                ha='center'
-            )
-            
-        plt.title("5-Year Price Forecast")
-        plt.xlabel("Year")
-        plt.ylabel("Projected Value")
-        plt.grid(True)
+            for i, txt in enumerate(context["future_outlook"]):
+                plt.annotate(
+                    f"{txt['growth_percent']}%",
+                    (years[i], values[i]),
+                    textcoords="offset points",
+                    xytext=(0,10),
+                    ha='center'
+                )
 
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", bbox_inches="tight")
-        buffer.seek(0)
-        image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
-        plt.close()
+            plt.title("5-Year Price Forecast")
+            plt.xlabel("Year")
+            plt.ylabel("Projected Value")
+            plt.grid(True)
 
-        # Add to report context
-        context["forecast_chart"] = image_base64
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format="png", bbox_inches="tight")
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+            plt.close()
+
+            context["forecast_chart"] = image_base64
+        else:
+            context["forecast_chart"] = []
         
         address = ai_json["property_details"]["address"]
 
         # 3️⃣ Geocode
         geo = geocode_address(address)
+
+        currency_code = "USD"
+
         if geo:
             context["property_maps"] = build_static_maps(
                 geo["lat"],
-                geo["lng"]
+                geo["lng"],
+                address
             )
+
+            detected_country = geo.get("country_code")
+
+            if detected_country:
+                currency_code = get_currency_from_country(db, detected_country)
+
         else:
             context["property_maps"] = None
+            
+        context["currency_code"] = currency_code
 
         # if geo:
         #     maps = build_static_maps(geo["lat"], geo["lng"])
@@ -241,7 +278,7 @@ def send_report_email_task(
         raise
 
     finally:
-        if temp_path and os.path.exists(temp_path):
+        if temp_path is not None and os.path.exists(temp_path):
             os.remove(temp_path)
 
         db.close()

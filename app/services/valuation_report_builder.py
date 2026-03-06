@@ -296,7 +296,11 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         "Healthy resale and rental absorption observed",
     ]
 
-    future_outlook = _build_future_outlook(ai_json)
+    # future_outlook = _build_future_outlook(ai_json)
+    future_outlook = []
+    
+    if ai_json.get("forecast"):
+        future_outlook = _build_future_outlook(ai_json)
         
     swot_analysis = ai_json.get(
         "swot_analysis",
@@ -335,4 +339,5 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         "swot_analysis": swot_analysis,
         "rental_analysis": rental_analysis,
         "disclaimer": disclaimer,
+        "currency_code": ai_json.get("currency_code"),
     }

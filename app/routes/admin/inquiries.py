@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from fastapi import APIRouter, Depends, Query, HTTPException
 from datetime import datetime
 
-from app.deps import get_db, require_superuser, pagination_params
+from app.deps import get_db, require_superuser, pagination_params, require_management
 from app.models.inquiry import Inquiry
 from app.models import User
 from app.schemas.admin import AdminInquiryResponse
@@ -26,7 +26,7 @@ router = APIRouter(
 )
 def list_inquiries(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_superuser),
+    admin_user: User = Depends(require_management),
     params: dict = Depends(pagination_params),
 
     # Filters

@@ -267,13 +267,15 @@ def get_job_status(
     if not valuation:
         raise HTTPException(404, "Valuation not found")
     
-    country = (
-        db.query(Country)
-        .filter(Country.country_code == valuation.country_code)
-        .first()
-    )
+    # country = (
+    #     db.query(Country)
+    #     .filter(Country.country_code == valuation.country_code)
+    #     .first()
+    # )
 
-    currency_code = country.currency_code if country else None
+    # currency_code = country.currency_code if country else None
+    
+    currency_code = valuation.report_context.get("currency_code")
 
     return {
         "status": "success",

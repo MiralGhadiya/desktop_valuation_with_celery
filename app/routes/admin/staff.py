@@ -12,7 +12,7 @@ from app.common import PaginatedResponse
 
 from app.database.db import get_db
 from app.utils.response import APIResponse, success_response
-from app.deps import pagination_params, require_superuser
+from app.deps import pagination_params, require_superuser, require_management
 
 router = APIRouter(prefix="/admin/staff", tags=["admin-staff"])
 
@@ -31,7 +31,7 @@ def build_accesses(staff: Staff) -> dict:
 def create_staff(
     staff: StaffCreate, 
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_superuser)
+    admin_user: User = Depends(require_management)
 ):
 
     existing_staff = db.query(Staff).filter(Staff.email == staff.email).first()
@@ -77,7 +77,7 @@ def create_staff(
 @router.get("/", response_model=APIResponse[PaginatedResponse[StaffResponse]])
 def list_staff(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_superuser),
+    admin_user: User = Depends(require_management),
     params: dict = Depends(pagination_params),
     
 ):
@@ -117,7 +117,7 @@ def list_staff(
 def get_staff(
     staff_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     
     staff_member = db.query(Staff).filter(Staff.id == staff_id).first()
@@ -143,7 +143,7 @@ def update_staff(
     staff_id: UUID,
     staff_update: StaffUpdate, 
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     staff_member = db.query(Staff).filter(Staff.id == staff_id).first()
 
@@ -191,7 +191,7 @@ def update_staff(
 def delete_staff(
     staff_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_superuser),
+    _: User = Depends(require_management),
 ):
     staff_member = db.query(Staff).filter(Staff.id == staff_id).first()
 

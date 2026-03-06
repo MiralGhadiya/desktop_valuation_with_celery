@@ -15,7 +15,7 @@ from app.common import PaginatedResponse
 from app.utils.email import send_feedback_reply_email
 from app.utils.response import APIResponse, success_response
 
-from app.deps import get_db, require_superuser, pagination_params
+from app.deps import get_db, require_superuser, pagination_params, require_management
 
 from app.utils.logger_config import app_logger as logger
 
@@ -31,7 +31,7 @@ router = APIRouter(
         )
 def list_feedback(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     params: dict = Depends(pagination_params),
 
     user_id: Optional[int] = Query(None),
@@ -108,7 +108,7 @@ def admin_feedback_action(
     feedback_id: UUID,
     data: AdminFeedbackAction,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     feedback = db.query(Feedback).filter(
         Feedback.id == feedback_id
@@ -158,7 +158,7 @@ def admin_feedback_action(
 def get_feedback_by_id(
     feedback_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     feedback = db.query(Feedback).filter(
         Feedback.id == feedback_id
@@ -174,7 +174,7 @@ def get_feedback_by_id(
 def delete_feedback(
     feedback_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     feedback = db.query(Feedback).filter(
         Feedback.id == feedback_id

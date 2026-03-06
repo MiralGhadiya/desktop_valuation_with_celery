@@ -3,73 +3,52 @@
 from datetime import datetime
 
 
-def build_report_context(ai_json, user_input, valuation_id=None):    
+def _get_value_or_fallback(user_val, ai_val, default="N/A"):
+    """Helper function to get value with fallback chain."""
+    return user_val or ai_val or default
+
+
+def _build_property_details(user_input, ai_json, construction_year, property_age):
+    """Extract property details section."""
     built_up_area = (
         user_input.get("built_up_area_sqft")
         or ai_json["property_details"].get("built_up_area_sqft")
     )
     
-    year_built = user_input.get("year_built")
-
-    if year_built:
-        try:
-            construction_year = int(year_built)
-            property_age = datetime.now().year - construction_year
-        except ValueError:
-            construction_year = None
-            property_age = None
-    else:
-        construction_year = None
-        property_age = None
-    
-    report_metadata = {
-        "valuation_id": valuation_id or "N/A",
-        "date_of_report": datetime.now().strftime("%d %B %Y"),
-        "client_name": user_input.get("client_name", "N/A"),
-    }
-
-    property_details = {
+    return {
         "name_of_owner": user_input.get("full_name", "N/A"),
         "project_name": user_input.get("project_name", "N/A"),
         "property_address": ai_json["property_details"].get("address", "N/A"),
         "property_type": ai_json["property_details"].get("property_type", "N/A"),
-        "configuration": (
-            user_input.get("configuration")
-            or ai_json["property_details"].get("configuration")
-            or "N/A"
+        "configuration": _get_value_or_fallback(
+            user_input.get("configuration"),
+            ai_json["property_details"].get("configuration")
         ),
         "land_area_sqft": ai_json["property_details"].get("land_area_sqft", "N/A"),
-        "built_up_area_sqft": built_up_area if built_up_area else "N/A",
-        
-        "construction_status": (
-            user_input.get("construction_status")
-            or ai_json["property_details"].get("construction_status")
-            or "N/A"
+        "carpet_area": built_up_area if built_up_area else "N/A",
+        "construction_status": _get_value_or_fallback(
+            user_input.get("construction_status"),
+            ai_json["property_details"].get("construction_status")
         ),
-        "construction_year": (
-            construction_year
-            or ai_json["property_details"].get("construction_year")
-            or "N/A"
+        "construction_year": _get_value_or_fallback(
+            construction_year,
+            ai_json["property_details"].get("construction_year")
         ),
-        "property_age_years": (
-            property_age
-            or ai_json["property_details"].get("age_years")
-            or "N/A"
+        "property_age_years": _get_value_or_fallback(
+            property_age,
+            ai_json["property_details"].get("age_years")
         ),
-        "last_sale_date": (
-            user_input.get("last_sale_date")
-            or ai_json["property_details"].get("last_sale_date")
-            or "N/A"
+        "last_sale_date": _get_value_or_fallback(
+            user_input.get("last_sale_date"),
+            ai_json["property_details"].get("last_sale_date")
         ),
-        "last_sale_price": (
-            user_input.get("last_sale_price")
-            or ai_json["property_details"].get("last_sale_price")
-            or "N/A"
+        "last_sale_price": _get_value_or_fallback(
+            user_input.get("last_sale_price"),
+            ai_json["property_details"].get("last_sale_price")
         ),
-        "ownership_type": (
-            user_input.get("ownership_type")
-            or ai_json["property_details"].get("ownership_type")
-            or "N/A"
+        "ownership_type": _get_value_or_fallback(
+            user_input.get("ownership_type"),
+            ai_json["property_details"].get("ownership_type")
         ),
         "title_details": ai_json["property_details"].get("title_details", "N/A"),
         "purpose_of_report": user_input.get("purpose_of_valuation", "N/A"),
@@ -77,95 +56,88 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         "inspection": "No Physical Inspection Conducted",
         "confidentiality": "Strictly for internal reference",
     }
-    
-    location_identification = {
-        "micro_location": (
-            user_input.get("micro_location")
-            or ai_json["property_details"].get("micro_location")
-            or "N/A"
+
+
+def _build_location_identification(user_input, ai_json):
+    """Extract location identification section."""
+    return {
+        "micro_location": _get_value_or_fallback(
+            user_input.get("micro_location"),
+            ai_json["property_details"].get("micro_location")
         ),
-        "municipal_authority": (
-            user_input.get("municipal_authority")
-            or ai_json["property_details"].get("municipal_authority")
-            or "N/A"
+        "municipal_authority": _get_value_or_fallback(
+            user_input.get("municipal_authority"),
+            ai_json["property_details"].get("municipal_authority")
         ),
-        "connectivity": (
-            user_input.get("connectivity")
-            or ai_json["property_details"].get("connectivity")
-            or "N/A"
+        "connectivity": _get_value_or_fallback(
+            user_input.get("connectivity"),
+            ai_json["property_details"].get("connectivity")
         ),
-        "social_infrastructure": (
-            user_input.get("social_infrastructure")
-            or ai_json["property_details"].get("social_infrastructure")
-            or "N/A"
+        "social_infrastructure": _get_value_or_fallback(
+            user_input.get("social_infrastructure"),
+            ai_json["property_details"].get("social_infrastructure")
         ),
-        "surroundings": (
-            user_input.get("surroundings")
-            or ai_json["property_details"].get("surroundings")
-            or "N/A"
+        "surroundings": _get_value_or_fallback(
+            user_input.get("surroundings"),
+            ai_json["property_details"].get("surroundings")
         ),
         "zoning": ai_json["property_details"].get("zoning", "N/A"),
-        "demand_profile": (
-            user_input.get("demand_profile")
-            or ai_json["property_details"].get("demand_profile")
-            or "N/A"
+        "demand_profile": _get_value_or_fallback(
+            user_input.get("demand_profile"),
+            ai_json["property_details"].get("demand_profile")
         ),
     }
 
-    project_profile = {
-        "developer": (
-            user_input.get("developer")
-            or ai_json["property_details"].get("developer")
-            or "N/A"
+
+def _build_project_profile(user_input, ai_json):
+    """Extract project profile section."""
+    return {
+        "developer": _get_value_or_fallback(
+            user_input.get("developer"),
+            ai_json["property_details"].get("developer")
         ),
-        "project_positioning": (
-            user_input.get("project_positioning")
-            or ai_json["property_details"].get("project_positioning")
-            or "N/A"
+        "project_positioning": _get_value_or_fallback(
+            user_input.get("project_positioning"),
+            ai_json["property_details"].get("project_positioning")
         ),
-        "towers": (
-            user_input.get("towers")
-            or ai_json["property_details"].get("towers")
-            or "N/A"
+        "towers": _get_value_or_fallback(
+            user_input.get("towers"),
+            ai_json["property_details"].get("towers")
         ),
-        "amenities": (
-            user_input.get("amenities")
-            or ai_json["property_details"].get("amenities")
-            or "N/A"
+        "amenities": _get_value_or_fallback(
+            user_input.get("amenities"),
+            ai_json["property_details"].get("amenities")
         ),
-        "market_perception": (
-            user_input.get("market_perception")
-            or ai_json["property_details"].get("market_perception")
-            or "N/A"
+        "market_perception": _get_value_or_fallback(
+            user_input.get("market_perception"),
+            ai_json["property_details"].get("market_perception")
         ),
     }
 
-    area_details = {
+
+def _build_area_details(user_input, ai_json, built_up_area):
+    """Extract area details section."""
+    return {
         "carpet_area_sqft": built_up_area if built_up_area else "N/A",
-        "layout": (
-            user_input.get("layout")
-            or ai_json["property_details"].get("layout")
-            or "N/A"
+        "layout": _get_value_or_fallback(
+            user_input.get("layout"),
+            ai_json["property_details"].get("layout")
         ),
-        "floor_plan": (
-            user_input.get("floor_plan")
-            or ai_json["property_details"].get("floor_plan")
-            or "N/A"
+        "floor_plan": _get_value_or_fallback(
+            user_input.get("floor_plan"),
+            ai_json["property_details"].get("floor_plan")
         ),
-        "current_usage": (
-            user_input.get("current_usage")
-            or ai_json["property_details"].get("current_usage")
-            or "N/A"
+        "current_usage": _get_value_or_fallback(
+            user_input.get("current_usage"),
+            ai_json["property_details"].get("current_usage")
         ),
     }
 
 
-    raw_comparables = ai_json.get("comparables_used", [])
-
-    market_benchmark = []
-
-    for comp in raw_comparables:
-        market_benchmark.append({
+def _build_market_benchmark(raw_comparables):
+    """Extract market benchmark section."""
+    return [
+        {
             "address": comp.get("address", "N/A"),
             "beds_baths": comp.get("beds_baths", "N/A"),
             "land_size_sqft": comp.get("land_size_sqft", "N/A"),
@@ -173,24 +145,29 @@ def build_report_context(ai_json, user_input, valuation_id=None):
             "sale_price": comp.get("sale_price", "N/A"),
             "distance_km": comp.get("distance_km", "N/A"),
             "comparison_level": comp.get("comparison_level", "Comparable"),
-        })
-        
-    mid_value = ai_json["predicted_value"]["mid_value"]
-    area_for_valuation = built_up_area or 0
+        }
+        for comp in raw_comparables
+    ]
 
+
+def _build_indicative_market_value(mid_value, area_for_valuation):
+    """Extract indicative market value section."""
     adopted_rate = (
         int(mid_value / area_for_valuation)
         if area_for_valuation and area_for_valuation > 0
         else "N/A"
     )
-
-    indicative_market_value = {
+    
+    return {
         "area_considered_sqft": area_for_valuation,
         "adopted_market_rate": adopted_rate,
         "indicative_value": mid_value,
     }
-    
-    value_range = {
+
+
+def _build_value_range(ai_json):
+    """Extract value range section."""
+    return {
         "conservative": {
             "value": ai_json["predicted_value"]["low_value"],
             "explanation": ai_json["predicted_value"].get(
@@ -213,14 +190,104 @@ def build_report_context(ai_json, user_input, valuation_id=None):
             )
         }
     }
-        
-    advanced_analytics = {
+
+
+def _build_advanced_analytics(ai_json):
+    """Extract advanced analytics section."""
+    return {
         "confidence_score": ai_json["predicted_value"].get("confidence_score", 0),
         "recommended_ltv": ai_json.get("bank_lending_model", {}).get("recommended_ltv", 0),
         "safe_lending_value": ai_json.get("bank_lending_model", {}).get("safe_lending_value", 0),
         "risk_level": ai_json.get("bank_lending_model", {}).get("risk_level", "N/A"),
         "valuation_validity_days": ai_json.get("valuation_validity_days", 60),
     }
+
+
+def _build_future_outlook(ai_json):
+    """Extract future outlook section."""
+    forecast = ai_json.get("forecast", {})
+    current_year = datetime.now().year
+    base_value = ai_json["predicted_value"]["mid_value"]
+    
+    growth_rates = [
+        forecast.get("year_1_growth_percent", 0),
+        forecast.get("year_2_growth_percent", 0),
+        forecast.get("year_3_growth_percent", 0),
+        forecast.get("year_4_growth_percent", 0),
+        forecast.get("year_5_growth_percent", 0),
+    ]
+    
+    future_outlook = []
+    for i, rate in enumerate(growth_rates, start=1):
+        projected_value = int(base_value * ((1 + rate / 100) ** i))
+        future_outlook.append({
+            "year": current_year + i,
+            "expected_value": projected_value,
+            "growth_percent": rate,
+        })
+    
+    return future_outlook
+
+
+def _build_rental_analysis(ai_json):
+    """Extract rental analysis section."""
+    rental_raw = ai_json.get("rental_analysis", {})
+    
+    return {
+        "estimated_monthly_rent": rental_raw.get("estimated_monthly_rent", 0),
+        "estimated_annual_rent": rental_raw.get("estimated_annual_rent", 0),
+        "rental_yield_percent": rental_raw.get("rental_yield_percent", 0),
+        "rental_demand_level": rental_raw.get("rental_demand_level", "N/A"),
+        "average_rent_locality": rental_raw.get("average_rent_locality", 0),
+        "nearby_rental_comparables": rental_raw.get("nearby_rental_comparables", []),
+    }
+
+
+def _calculate_construction_year_and_age(year_built):
+    """Calculate construction year and property age from year_built."""
+    if not year_built:
+        return None, None
+    try:
+        construction_year = int(year_built)
+        property_age = datetime.now().year - construction_year
+        return construction_year, property_age
+    except ValueError:
+        return None, None
+
+
+def _build_report_metadata(user_input, valuation_id):
+    """Extract report metadata section."""
+    return {
+        "valuation_id": valuation_id or "N/A",
+        "date_of_report": datetime.now().strftime("%d %B %Y"),
+        "client_name": user_input.get("client_name", "N/A"),
+    }
+
+
+def build_report_context(ai_json, user_input, valuation_id=None):    
+    built_up_area = (
+        user_input.get("built_up_area_sqft")
+        or ai_json["property_details"].get("built_up_area_sqft")
+    )
+    
+    year_built = user_input.get("year_built")
+    construction_year, property_age = _calculate_construction_year_and_age(year_built)
+    
+    report_metadata = _build_report_metadata(user_input, valuation_id)
+    property_details = _build_property_details(user_input, ai_json, construction_year, property_age)
+    location_identification = _build_location_identification(user_input, ai_json)
+    project_profile = _build_project_profile(user_input, ai_json)
+    area_details = _build_area_details(user_input, ai_json, built_up_area)
+    
+    raw_comparables = ai_json.get("comparables_used", [])
+    market_benchmark = _build_market_benchmark(raw_comparables)
+    
+    mid_value = ai_json["predicted_value"]["mid_value"]
+    area_for_valuation = built_up_area or 0
+    indicative_market_value = _build_indicative_market_value(mid_value, area_for_valuation)
+    
+    value_range = _build_value_range(ai_json)
+    advanced_analytics = _build_advanced_analytics(ai_json)
 
     nearby_market_evidence = [
         "Recent transactions in nearby premium projects support the adopted rate",
@@ -229,28 +296,11 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         "Healthy resale and rental absorption observed",
     ]
 
-    forecast = ai_json.get("forecast", {})
-    current_value = ai_json["predicted_value"]["mid_value"]
-    current_year = datetime.now().year
-
+    # future_outlook = _build_future_outlook(ai_json)
     future_outlook = []
-    growth_rates = [
-        forecast.get("year_1_growth_percent", 0),
-        forecast.get("year_2_growth_percent", 0),
-        forecast.get("year_3_growth_percent", 0),
-        forecast.get("year_4_growth_percent", 0),
-        forecast.get("year_5_growth_percent", 0),
-    ]
-
-    base_value = ai_json["predicted_value"]["mid_value"]
-
-    for i, rate in enumerate(growth_rates, start=1):
-        projected_value = int(base_value * ((1 + rate / 100) ** i))
-        future_outlook.append({
-            "year": current_year + i,
-            "expected_value": projected_value,
-            "growth_percent": rate,
-        })
+    
+    if ai_json.get("forecast"):
+        future_outlook = _build_future_outlook(ai_json)
         
     swot_analysis = ai_json.get(
         "swot_analysis",
@@ -262,16 +312,7 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         }
     )
     
-    rental_raw = ai_json.get("rental_analysis", {})
-
-    rental_analysis = {
-        "estimated_monthly_rent": rental_raw.get("estimated_monthly_rent", 0),
-        "estimated_annual_rent": rental_raw.get("estimated_annual_rent", 0),
-        "rental_yield_percent": rental_raw.get("rental_yield_percent", 0),
-        "rental_demand_level": rental_raw.get("rental_demand_level", "N/A"),
-        "average_rent_locality": rental_raw.get("average_rent_locality", 0),
-        "nearby_rental_comparables": rental_raw.get("nearby_rental_comparables", []),
-    }
+    rental_analysis = _build_rental_analysis(ai_json)
     
     disclaimer = [
         "This report is a Desktop Valuation Opinion prepared using secondary market data.",
@@ -298,4 +339,5 @@ def build_report_context(ai_json, user_input, valuation_id=None):
         "swot_analysis": swot_analysis,
         "rental_analysis": rental_analysis,
         "disclaimer": disclaimer,
+        "currency_code": ai_json.get("currency_code"),
     }

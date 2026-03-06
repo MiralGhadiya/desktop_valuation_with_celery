@@ -433,6 +433,40 @@ exchange_rates (
 )
 ```
 
+### Staff Table
+```sql
+staff (
+  id: UUID [PK],
+  user_id: UUID [FK -> users],
+  name: STRING,
+  email: STRING [UNIQUE],
+  phone: STRING,
+  password: STRING,
+  role: STRING,
+  can_access_user: BOOLEAN,
+  can_access_staff: BOOLEAN,
+  can_access_dashboard: BOOLEAN,
+  can_access_reports: BOOLEAN,
+  can_access_subscriptions_plans: BOOLEAN,
+  created_at: DATETIME
+)
+```
+
+### Inquiries Table
+```sql
+inquiries (
+  id: UUID [PK],
+  type: STRING (CONTACT, SERVICE),
+  first_name: STRING,
+  last_name: STRING,
+  email: STRING,
+  phone_number: STRING,
+  message: TEXT,
+  services: JSON,
+  created_at: DATETIME
+)
+```
+
 ---
 
 ## Authentication & Authorization

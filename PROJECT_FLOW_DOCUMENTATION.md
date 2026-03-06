@@ -233,6 +233,19 @@ This document describes the overall flow of the Desktop Valuation system from bo
    │ Views Feedback   │
    │ Status & Replies │
    └─────────────────┘
+
+9. PUBLIC INQUIRIES
+   ┌─────────────────┐
+   │ Visitor Submits │
+   │ Contact/Service │
+   │ Inquiry         │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │ Inquiry Saved & │
+   │ Acknowledged    │
+   └─────────────────┘
 ```
 
 ### User Flow Summary
@@ -377,6 +390,32 @@ This document describes the overall flow of the Desktop Valuation system from bo
    │ - Update Status │
    │ - Add Notes     │
    │ - Delete        │
+   └─────────────────┘
+
+8. STAFF MANAGEMENT
+   ┌─────────────────┐
+   │ Admin Views     │
+   │ Staff List      │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │ Admin Actions:  │
+   │ - Create Staff  │
+   │ - Edit Access   │
+   │ - Delete        │
+   └─────────────────┘
+
+9. INQUIRY MANAGEMENT
+   ┌─────────────────┐
+   │ Admin Views     │
+   │ Inquiries       │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │ Filter & Search │
+   │ By Type/Date    │
    └─────────────────┘
 ```
 

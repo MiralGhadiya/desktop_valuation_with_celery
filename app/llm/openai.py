@@ -69,7 +69,7 @@ BASE_PROMPT = """
           Inference Rules (MANDATORY):
           - If location or project attributes are missing, infer them logically
           - Use city, address, property type, and zoning as signals
-          - Use standard Indian real estate norms
+          - Use standard real estate norms
           - Never leave descriptive fields empty unless impossible
 
           Location:
@@ -99,6 +99,16 @@ BASE_PROMPT = """
           - Describe rental demand level
           - Estimate average rent in the locality
           - Provide 2-3 nearby rental comparables if possible
+          
+          Currency Rules (MANDATORY):
+          - Determine the valuation currency based on property country
+          - India → INR
+          - United States → USD
+          - UAE → AED
+          - United Kingdom → GBP
+          - Australia → AUD
+          - Canada → CAD
+          - Always produce valuation numbers in the local currency of the property country
         """
 
 PROPERTY_PROMPTS = {

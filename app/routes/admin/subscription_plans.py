@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
-from app.deps import get_db, require_superuser
+from app.deps import get_db, require_superuser, require_management
 from app.models.subscription import SubscriptionPlan
 from app.schemas import SubscriptionPlanResponse, SubscriptionPlanCreate, SubscriptionPlanUpdate
 from app.services.subscription_service import add_subscription_plans_from_excel
@@ -62,7 +62,7 @@ class SubscriptionPlanFilters:
 @router.get("", response_model=APIResponse[PaginatedResponse[SubscriptionPlanResponse]])
 def list_subscription_plans(
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
     
     params: dict = Depends(pagination_params),
     
@@ -156,7 +156,7 @@ def list_subscription_plans(
 def get_subscription_plan(
     plan_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin requested subscription plan plan_id={plan_id}")
 
@@ -175,7 +175,7 @@ def get_subscription_plan(
 def create_subscription_plan(
     data: SubscriptionPlanCreate,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(
         "Admin creating subscription plan "
@@ -209,7 +209,7 @@ def create_subscription_plan(
 def upload_subscription_plans_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info("Admin uploading subscription plans via Excel")
 
@@ -229,7 +229,7 @@ def update_subscription_plan(
     plan_id: UUID,
     data: SubscriptionPlanUpdate,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin updating subscription plan plan_id={plan_id}")
 
@@ -266,7 +266,7 @@ def update_subscription_plan(
 def toggle_subscription_plan(
     plan_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin toggling subscription plan plan_id={plan_id}")
 
@@ -301,7 +301,7 @@ def toggle_subscription_plan(
 def delete_subscription_plan(
     plan_id: UUID,
     db: Session = Depends(get_db),
-    _: None = Depends(require_superuser),
+    _: None = Depends(require_management),
 ):
     logger.info(f"Admin deleting subscription plan plan_id={plan_id}")
 

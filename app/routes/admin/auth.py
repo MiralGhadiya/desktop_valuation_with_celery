@@ -175,7 +175,7 @@ def management_me(
 
 @router.get("/me", response_model=APIResponse[AdminProfile])
 def admin_me(
-    current_admin: User = Depends(require_superuser),
+    current_admin: User = Depends(require_management),
 ):
     logger.debug(f"Admin profile fetched user_id={current_admin.id}")
     return success_response(data=current_admin, message="Admin profile fetched successfully")
@@ -183,7 +183,7 @@ def admin_me(
 
 @router.post("/logout")
 def admin_logout(
-    current_admin: User = Depends(require_superuser),
+    current_admin: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
     try:
@@ -201,7 +201,7 @@ def admin_logout(
 @router.post("/change-password")
 def admin_change_password(
     data: ChangePassword,
-    current_admin: User = Depends(require_superuser),
+    current_admin: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
     logger.info(f"Admin password change attempt user_id={current_admin.id}")

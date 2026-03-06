@@ -12,6 +12,7 @@
    - [Profile Management Flow](#6-profile-management-flow)
    - [Password Reset Flow](#7-password-reset-flow)
    - [Feedback Submission Flow](#8-feedback-submission-flow)
+   - [Public Inquiry Flow](#9-public-inquiry-flow)
 3. [Admin Flows](#admin-flows)
    - [Admin Login Flow](#1-admin-login-flow)
    - [User Management Flow](#2-user-management-flow)
@@ -20,6 +21,8 @@
    - [Valuation Management Flow](#5-valuation-management-flow)
    - [Feedback Management Flow](#6-feedback-management-flow)
    - [Dashboard Overview Flow](#7-dashboard-overview-flow)
+   - [Staff Management Flow](#8-staff-management-flow)
+   - [Inquiry Management Flow](#9-inquiry-management-flow)
 4. [System Background Processes](#system-background-processes)
    - [Valuation Processing Flow](#valuation-processing-flow)
    - [Subscription Expiry Flow](#subscription-expiry-flow)
@@ -493,6 +496,28 @@ This document describes the complete workflows for both users and administrators
 
 ---
 
+### 9. Public Inquiry Flow
+
+**Objective:** Allow visitors or users to submit contact or service inquiries.
+
+**Flow Steps:**
+
+1. **User Submits Inquiry**
+   - API Endpoint: `POST /inquiries`
+   - User provides: `type` (CONTACT, SERVICE), `first_name`, `last_name`, `email`, `phone_number`, `message`, `services`.
+   - System registers the inquiry in the database.
+   - System returns a success message to the user.
+   - Optionally sends an introductory email or notification to the admin.
+
+**Decision Points:**
+- ❌ Invalid data format → `422 Unprocessable Entity`
+- ❌ Database error → `500 Internal Server Error`
+
+**Related Endpoints:**
+- `POST /inquiries`
+
+---
+
 ## Admin Flows
 
 ### 1. Admin Login Flow
@@ -838,6 +863,59 @@ This document describes the complete workflows for both users and administrators
 - `GET /admin/dashboard/valuations`
 - `GET /admin/dashboard/countries`
 - `GET /admin/dashboard/feedback`
+
+---
+
+### 8. Staff Management Flow
+
+**Objective:** Admin manages staff members and access permissions.
+
+**Flow Steps:**
+
+1. **Admin Views Staff Members**
+   - API Endpoint: `GET /admin/staff`
+   - Returns list of staff members and their permissions.
+
+2. **Admin Creates New Staff Member**
+   - API Endpoint: `POST /admin/staff`
+   - Admin provides: `name`, `email`, `phone`, `password`, `role`, and access flags.
+   - System creates new staff record.
+
+3. **Admin Updates Staff Member**
+   - API Endpoint: `PATCH /admin/staff/{staff_id}`
+   - Admin modifies details or permissions of a staff member.
+
+4. **Admin Deletes Staff Member**
+   - API Endpoint: `DELETE /admin/staff/{staff_id}`
+   - Systems removes the staff member from the database.
+
+**Decision Points:**
+- ❌ Email already registered → `400 Bad Request`
+- ❌ Staff member not found → `404 Not Found`
+
+**Related Endpoints:**
+- `GET /admin/staff`
+- `POST /admin/staff`
+- `PATCH /admin/staff/{staff_id}`
+- `DELETE /admin/staff/{staff_id}`
+
+---
+
+### 9. Inquiry Management Flow
+
+**Objective:** Admin reviews and manages public inquiries.
+
+**Flow Steps:**
+
+1. **Admin Views Inquiries**
+   - API Endpoint: `GET /admin/inquiries`
+   - Admin views the list of submitted inquiries with optional filters (date, type, search term).
+
+**Decision Points:**
+- ❌ Invalid sort field → `400 Bad Request`
+
+**Related Endpoints:**
+- `GET /admin/inquiries`
 
 ---
 

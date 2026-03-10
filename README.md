@@ -76,11 +76,22 @@
    alembic upgrade head
    ```
 
-6. **Initialize the Database:**
+6. **Initialize Database (Single Script):**
    ```bash
-   python app/scripts/create_superuser.py
-   python app/scripts/add_country.py
+   python app/scripts/setup_project.py
    ```
+
+## What the Setup Script Does
+
+**This will:**
+
+- Import .env variables to db
+
+- Import countries to db
+
+- Add subscription duration in days to db
+
+- Create the first admin user
 
 ## Running the Application
 

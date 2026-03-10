@@ -1,0 +1,51 @@
+from dotenv import dotenv_values
+from sqlalchemy.orm import Session
+
+from app.database.db import SessionLocal, Base, engine
+from app.models.system_config import SystemConfig
+from app.utils.logger_config import app_logger as logger
+
+
+# Ensure tables exist
+Base.metadata.create_all(bind=engine)
+
+
+def import_env_variables():
+    env_vars = dotenv_values(".env")
+
+    db: Session = SessionLocal()
+
+    try:
+        for key, value in env_vars.items():
+            if value is None:
+                continue
+
+            existing = db.query(SystemConfig).filter(
+                SystemConfig.config_key == key
+            ).first()
+
+            if existing:
+                logger.info(f"Skipping existing config: {key}")
+                continue
+
+            db.add(SystemConfig(
+                config_key=key,
+                config_value=value
+            ))
+
+            logger.info(f"Inserted config: {key}")
+
+        db.commit()
+        logger.info("Environment variables imported successfully")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Import failed: {e}")
+        raise
+
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    import_env_variables()

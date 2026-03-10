@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Resend Verification Email</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --forest: #0D2B23;
+            --forest-mid: #1A4035;
+            --sage: #3D7A65;
+            --mint: #A8D5C2;
+            --cream: #F7F5F0;
+            --warm-white: #FDFCF9;
+            --text-dark: #0D1C17;
+            --text-muted: #6B8F82;
+            --error: #C0392B;
+            --success: #2D7A5E;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Decorative background blobs */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -120px; right: -120px;
+            width: 480px; height: 480px;
+            background: radial-gradient(circle, rgba(168,213,194,0.35) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -80px; left: -80px;
+            width: 360px; height: 360px;
+            background: radial-gradient(circle, rgba(61,122,101,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .card {
+            background: var(--warm-white);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 460px;
+            padding: 52px 48px 48px;
+            box-shadow:
+                0 1px 2px rgba(13,43,35,0.04),
+                0 8px 32px rgba(13,43,35,0.08),
+                0 32px 64px rgba(13,43,35,0.06);
+            border: 1px solid rgba(168,213,194,0.3);
+            position: relative;
+            animation: cardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes cardIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Top accent line */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 48px; right: 48px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--sage), transparent);
+            border-radius: 0 0 2px 2px;
+        }
+
+        .icon-wrap {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, var(--forest-mid), var(--sage));
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 16px rgba(61,122,101,0.3);
+            animation: iconIn 0.6s 0.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes iconIn {
+            from { opacity: 0; transform: scale(0.7) rotate(-10deg); }
+            to   { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+
+        .icon-wrap svg { width: 24px; height: 24px; stroke: white; fill: none; stroke-width: 1.8; }
+
+        h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 28px;
+            color: var(--text-dark);
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 14.5px;
+            font-weight: 400;
+            line-height: 1.6;
+            margin-bottom: 36px;
+        }
+
+        .field-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--forest-mid);
+            margin-bottom: 8px;
+        }
+
+        .input-wrap {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-wrap svg {
+            position: absolute;
+            left: 16px; top: 50%;
+            transform: translateY(-50%);
+            width: 17px; height: 17px;
+            stroke: var(--text-muted);
+            fill: none; stroke-width: 1.7;
+            pointer-events: none;
+            transition: stroke 0.2s;
+        }
+
+        input[type="email"] {
+            width: 100%;
+            padding: 14px 16px 14px 44px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14.5px;
+            font-weight: 400;
+            color: var(--text-dark);
+            background: var(--cream);
+            border: 1.5px solid #D8E8E2;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        input[type="email"]::placeholder { color: #AABFB8; }
+
+        input[type="email"]:focus {
+            border-color: var(--sage);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(61,122,101,0.1);
+        }
+
+        input[type="email"]:focus + svg,
+        .input-wrap:focus-within svg { stroke: var(--sage); }
+
+        /* Swap icon order in DOM so CSS sibling selector works */
+        .input-wrap input { order: 1; }
+        .input-wrap svg { order: 2; }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, var(--forest) 0%, var(--forest-mid) 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 16px rgba(13,43,35,0.25), 0 1px 3px rgba(13,43,35,0.2);
+            letter-spacing: 0.01em;
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent);
+            border-radius: inherit;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(13,43,35,0.3), 0 2px 6px rgba(13,43,35,0.2);
+        }
+
+        button:active:not(:disabled) { transform: translateY(0); }
+
+        button:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .btn-inner {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            position: relative; z-index: 1;
+        }
+
+        .btn-inner svg { width: 16px; height: 16px; stroke: white; fill: none; stroke-width: 2; transition: transform 0.2s; }
+        button:hover:not(:disabled) .btn-inner svg { transform: translateX(3px); }
+
+        /* Spinner */
+        .spinner {
+            width: 17px; height: 17px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        button.loading .spinner { display: block; }
+        button.loading .btn-text,
+        button.loading .btn-icon { display: none; }
+
+        /* Message */
+        #msg {
+            margin-top: 18px;
+            padding: 12px 16px;
+            border-radius: 9px;
+            font-size: 13.5px;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            gap: 9px;
+        }
+
+        #msg.success,
+        #msg.error {
+            display: flex;
+            animation: msgIn 0.3s ease;
+        }
+
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        #msg.success {
+            background: #EBF6F1;
+            color: var(--success);
+            border: 1px solid #B8E0CE;
+        }
+
+        #msg.error {
+            background: #FDF1F0;
+            color: var(--error);
+            border: 1px solid #EDCBC7;
+        }
+
+        #msg svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; }
+
+        .divider {
+            margin: 30px 0 0;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .divider a {
+            color: var(--sage);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .divider a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="icon-wrap">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+    </div>
+
+    <h1>Verify your email</h1>
+    <p class="subtitle">Enter your address below and we'll send you a fresh verification link.</p>
+
+    <label class="field-label" for="email">Email address</label>
+    <div class="input-wrap">
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email" required />
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+    </div>
+
+    <button id="submitBtn" type="button" onclick="handleSubmit()">
+        <span class="btn-inner">
+            <span class="btn-text">Send Verification Email</span>
+            <svg class="btn-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+            <div class="spinner"></div>
+        </span>
+    </button>
+
+    <div id="msg">
+        <svg id="msgIcon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"></svg>
+        <span id="msgText"></span>
+    </div>
+
+</div>
+
+<script>
+async function handleSubmit() {
+    const email = document.getElementById('email').value.trim();
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('msg');
+
+    if (!email) {
+        document.getElementById('email').focus();
+        return;
+    }
+
+    // Loading state
+    btn.classList.add('loading');
+    btn.disabled = true;
+    msg.className = '';
+
+    try {
+        const res = await fetch('/resend-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showMsg('error', data.detail || 'Something went wrong. Please try again.');
+        } else {
+            showMsg('success', data.message || 'Verification email sent successfully!');
+            document.getElementById('email').value = '';
+        }
+    } catch (err) {
+        showMsg('error', 'Could not connect. Check your connection and try again.');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function showMsg(type, text) {
+    const msg = document.getElementById('msg');
+    const icon = document.getElementById('msgIcon');
+    const msgText = document.getElementById('msgText');
+
+    msg.className = type;
+    msgText.textContent = text;
+
+    if (type === 'success') {
+        icon.innerHTML = '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+    } else {
+        icon.innerHTML = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+    }
+}
+
+// Allow Enter key
+document.getElementById('email').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleSubmit();
+});
+</script>
+
+</body>
+</html>

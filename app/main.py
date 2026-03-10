@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.db import engine, Base
+from app.core.config_manager import auto_reload, load_config
 from app.routes import auth as user_auth, valuation, subscription, payment, user_feedback, inquiry
 from app.routes.admin import (
     auth,
@@ -32,6 +33,13 @@ if os.getenv("ENV") != "production":
 logger.info("Database tables ensured")
 
 app = FastAPI(title="Desktop Valuation API")
+
+@app.on_event("startup")
+def startup_event():
+    logger.info("Loading system configuration from database...")
+    load_config()
+    auto_reload(30) 
+    logger.info("System configuration loaded")
 
 app.add_middleware(IPCountryMiddleware)
 

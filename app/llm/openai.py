@@ -1,29 +1,42 @@
 #app/llm/openai.py
 
-import os
 import json
-from openai import OpenAI
-from dotenv import load_dotenv
+from openai import OpenAI, OpenAIError
 from langsmith import traceable
-from openai import OpenAIError
+
+from app.core.config_manager import get_config
 from app.utils.logger_config import app_logger as logger
 
-load_dotenv()
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    logger.error("OPENAI_API_KEY is not set")
-    raise RuntimeError("Missing OPENAI_API_KEY")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
-logger.info("OpenAI client initialized successfully")
 
 class LLMError(Exception):
     """Base exception for LLM-related errors."""
     pass
 
+
 class LLMServiceUnavailable(LLMError):
     pass
+
+
+_client = None
+
+
+def get_openai_client():
+    global _client
+
+    if _client:
+        return _client
+
+    api_key = get_config("OPENAI_API_KEY")
+
+    if not api_key:
+        logger.error("OPENAI_API_KEY is not set")
+        raise RuntimeError("Missing OPENAI_API_KEY")
+
+    _client = OpenAI(api_key=api_key)
+
+    logger.info("OpenAI client initialized successfully")
+
+    return _client
 
 BASE_PROMPT = """
           Role: Certified real estate valuation engine.
@@ -395,6 +408,8 @@ def generate_forecast(core_output: dict):
         }}
       """
     try:
+      client = get_openai_client()
+
       response = client.chat.completions.create(
           model="gpt-5.2",
           messages=[{"role": "user", "content": prompt}],
@@ -418,8 +433,9 @@ def generate_forecast(core_output: dict):
 
 
 
-@traceable(name="openai_chat_completion", run_type="llm")
 def _call_openai(final_prompt: str):
+    client = get_openai_client()
+
     return client.chat.completions.create(
         model="gpt-5.2",
         messages=[{"role": "user", "content": final_prompt}],
@@ -454,6 +470,9 @@ def generate_swot(core_output: dict):
         "threats": []
         }}
         """
+        
+    client = get_openai_client()
+
     response = client.chat.completions.create(
         model="gpt-5.2",
         messages=[{"role": "user", "content": prompt}],

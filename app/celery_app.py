@@ -4,12 +4,18 @@ import os
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
+from app.core.config_manager import get_config
+
+from app.core.config_manager import load_config
+
+load_config()
 
 load_dotenv()
 
+# REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
-celery_app = Celery(
+celery_app = Celery(    
     "app",
     broker=REDIS_URL,
     backend=REDIS_URL,

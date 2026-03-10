@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import hash_password, pwd_context
-from app.deps import pagination_params, get_db, require_superuser, require_management
+from app.deps import pagination_params, get_db, require_management
 
 from app.models import User, EmailVerificationToken
 from app.services import auth_service, country_service
@@ -25,6 +25,8 @@ from app.utils.phone import get_country_from_mobile
 from app.utils.date_filters import filter_by_date_range
 from app.utils.response import APIResponse, success_response
 
+from app.core.config_manager import get_config
+
 from app.utils.logger_config import app_logger as logger
 
 
@@ -33,7 +35,9 @@ router = APIRouter(
     tags=["admin-users"]
 )
 
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+def get_base_url():
+    return get_config("BASE_URL", "http://localhost:8000")
 
 USER_NOT_FOUND = "User not found"
 
@@ -280,7 +284,7 @@ def update_user(
         verification = EmailVerificationToken(
             user_id=user.id,
             token_hash=pwd_context.hash(raw_token),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
         db.add(verification)
 
@@ -288,7 +292,7 @@ def update_user(
         try:
             send_verification_email(
                 user.email,
-                f"{BASE_URL}/verify-email?token={raw_token}"
+                f"{get_base_url()}/verify-email?token={raw_token}"
             )
         except Exception:
             logger.exception(

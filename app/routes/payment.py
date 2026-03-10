@@ -14,22 +14,31 @@ from app.deps import get_db, get_current_user
 from app.models import SubscriptionPlan, UserSubscription, User
 from app.models.subscription_settings import SubscriptionSettings
 from app.services.exchange_rate_service import get_rate
-
+from app.core.config_manager import get_config
 
 from app.utils.logger_config import app_logger as logger
 
 load_dotenv()
 
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+# RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+# RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
-if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
-    logger.error("RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set")
-    raise RuntimeError("Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET")
+def get_razorpay_client():
+    key_id = get_config("RAZORPAY_KEY_ID")
+    key_secret = get_config("RAZORPAY_KEY_SECRET")
+
+    if not key_id or not key_secret:
+        raise RuntimeError("Missing Razorpay credentials")
+
+    return razorpay.Client(auth=(key_id, key_secret))
+
+# if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+#     logger.error("RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set")
+#     raise RuntimeError("Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET")
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
-client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+client = get_razorpay_client()
 
 def _pricing_country(request: Request, current_user: User) -> str:
     ip_country = getattr(request.state, "ip_country", None)
@@ -155,7 +164,7 @@ def create_order(
 
         return {
             "order_id": order["id"],
-            "razorpay_key": RAZORPAY_KEY_ID,
+            "razorpay_key": get_razorpay_client().auth[0],
             "amount": amount,
             # "currency": plan.currency,
             "currency": currency,
@@ -217,11 +226,21 @@ def verify_payment(
         sub.is_expired = False
         sub.start_date = now
         # sub.end_date = now + relativedelta(years=2)
-        
+                
         settings = db.query(SubscriptionSettings).first()
 
         if not settings:
-            raise HTTPException(500, "Subscription settings not configured")
+            # Create default settings if missing
+            settings = SubscriptionSettings(subscription_duration_days=365)
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
+
+        # If value is NULL or invalid → set default
+        if not settings.subscription_duration_days or settings.subscription_duration_days <= 0:
+            settings.subscription_duration_days = 365
+            db.commit()
+            db.refresh(settings)
 
         duration_days = settings.subscription_duration_days
         sub.end_date = now + relativedelta(days=duration_days)

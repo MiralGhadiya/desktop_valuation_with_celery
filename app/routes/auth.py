@@ -10,6 +10,8 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 
 from dotenv import load_dotenv
+
+from app.core.config_manager import get_config
 load_dotenv()
 
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -33,7 +35,9 @@ from app.models import EmailVerificationToken, User, SubscriptionPlan, UserSubsc
 
 from app.utils.logger_config import app_logger as logger
 
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+def get_base_url():
+    return get_config("BASE_URL", "http://localhost:8000")
 
 datetime.now(timezone.utc)
 
@@ -47,7 +51,8 @@ def verify_google_token(token: str):
         payload = id_token.verify_oauth2_token(
             token,
             requests.Request(),
-            os.getenv("GOOGLE_CLIENT_ID"),
+            # os.getenv("GOOGLE_CLIENT_ID")
+            get_config("GOOGLE_CLIENT_ID"),
             clock_skew_in_seconds=10  
         )
         return payload
@@ -102,7 +107,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         verification = EmailVerificationToken(
             user_id=new_user.id,
             token_hash=pwd_context.hash(raw_token),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
         db.add(verification)
 
@@ -111,7 +116,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         try:
             send_verification_email(
                 new_user.email,
-                f"{BASE_URL}/verify-email?token={raw_token}"
+                f"{get_base_url()}/verify-email?token={raw_token}"
             )
         except Exception:
             logger.exception("Failed to send verification email")
@@ -157,15 +162,24 @@ def verify_email_page(
             logger.exception("Email verification failed")
 
     return templates.TemplateResponse(
-        "verify_email.html",
+        "emails/verify_email.html",
         {
             "request": request,
             "success": success,
             "message": message,
-            "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:3000")
+            # "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:3000")
+            "frontend_url": get_config("FRONTEND_URL", "http://localhost:3000")
         }
     )
 
+
+@router.get("/resend-verification-page", response_class=HTMLResponse)
+def resend_verification_page(request: Request):
+    return templates.TemplateResponse(
+        "emails/resend_verification.html",
+        {"request": request}
+    )
+    
 
 @router.post("/resend-verification")
 def resend_verification_email(
@@ -188,7 +202,7 @@ def resend_verification_email(
     db.query(EmailVerificationToken).filter(
         EmailVerificationToken.user_id == user.id,
         EmailVerificationToken.used == False,
-    ).update({"used": True})
+    ).update({"used": True}, synchronize_session=False)
 
     raw_token = secrets.token_urlsafe(48)
     hashed_token = pwd_context.hash(raw_token)
@@ -196,7 +210,7 @@ def resend_verification_email(
     verification = EmailVerificationToken(
         user_id=user.id,
         token_hash=hashed_token,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
     )
     
     try:
@@ -207,7 +221,7 @@ def resend_verification_email(
         logger.exception("Failed to create email verification token")
         raise HTTPException(500, "Failed to resend verification email")
 
-    verify_link = f"{BASE_URL}/verify-email?token={raw_token}"
+    verify_link = f"{get_base_url()}/verify-email?token={raw_token}"
     send_verification_email(user.email, verify_link)
 
     logger.info(f"Verification email resent user_id={user.id}")
@@ -562,7 +576,7 @@ def forgot_password(
     reset = PasswordResetToken(
         user_id=user.id,
         token_hash=hashed_token,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30)
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
     )
     
     try:
@@ -573,7 +587,7 @@ def forgot_password(
         logger.exception("Failed to create password reset token")
         raise HTTPException(500, "Failed to initiate password reset")
 
-    reset_link = f"{BASE_URL}/reset-password?token={raw_token}"
+    reset_link = f"{get_base_url()}/reset-password?token={raw_token}"
     
     send_reset_email(user.email, reset_link)
 

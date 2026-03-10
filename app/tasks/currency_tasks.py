@@ -9,11 +9,14 @@ from celery import shared_task
 from app.models import ExchangeRate
 from app.database.db import SessionLocal
 
+from app.core.config_manager import get_config
+
 load_dotenv() 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=60, retry_kwargs={"max_retries": 3})
 def update_exchange_rates(self):
-    api_key = os.getenv("EXCHANGE_RATE_API_KEY")
+    # api_key = os.getenv("EXCHANGE_RATE_API_KEY")
+    api_key = get_config("EXCHANGE_RATE_API_KEY")
     if not api_key:
         raise RuntimeError("EXCHANGE_RATE_API_KEY not set")
 

@@ -5,16 +5,19 @@ import os
 import random
 import requests
 
+from app.core.config_manager import get_config
 from app.utils.logger_config import app_logger as logger
 
-GOOGLE_MAPS_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+# GOOGLE_MAPS_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+def get_maps_key():
+    return get_config("GOOGLE_MAPS_API_KEY")
 
 def geocode_address(address: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
 
     params = {
         "address": address,
-        "key": GOOGLE_MAPS_KEY
+        "key": get_maps_key()
     }
 
     r = requests.get(url, params=params, timeout=10)
@@ -51,7 +54,7 @@ def find_place(address: str):
         "input": address,
         "inputtype": "textquery",
         "fields": "place_id,photos",
-        "key": GOOGLE_MAPS_KEY
+        "key": get_maps_key()
     }
 
     r = requests.get(url, params=params, timeout=10)
@@ -85,7 +88,7 @@ def get_place_photo(address: str):
         "https://maps.googleapis.com/maps/api/place/photo"
         f"?maxwidth=600"
         f"&photo_reference={ref}"
-        f"&key={GOOGLE_MAPS_KEY}"
+        f"&key={get_maps_key()}"
     )
     logger.info(f"Constructed photo URL: {url}")
 
@@ -106,7 +109,7 @@ def get_streetview_metadata(lat, lng):
         "location": f"{lat},{lng}",
         "radius": 200,
         "source": "outdoor",
-        "key": GOOGLE_MAPS_KEY
+        "key": get_maps_key()
     }
     
 
@@ -130,7 +133,7 @@ def build_street_view(lat, lng):
         f"&source=outdoor"
         f"&fov=90"
         f"&pitch=0"
-        f"&key={GOOGLE_MAPS_KEY}"
+        f"&key={get_maps_key()}"
     )
 
 
@@ -144,7 +147,7 @@ def build_static_maps(lat, lng, address=None):
             f"&size=600x400"
             f"&scale=2"
             f"&markers=color:red%7C{lat},{lng}"
-            f"&key={GOOGLE_MAPS_KEY}"
+            f"&key={get_maps_key()}"
         )
 
     street_view = build_street_view(lat, lng)

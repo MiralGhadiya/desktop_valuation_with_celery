@@ -86,7 +86,10 @@ def list_staff(
     
     query = db.query(Staff)
 
-    staff_members = query.offset((params["page"] - 1) * params["limit"]).limit(params["limit"]).all()
+    if params["limit"] is not None:
+        staff_members = query.offset((params["page"] - 1) * params["limit"]).limit(params["limit"]).all()
+    else:
+        staff_members = query.all()
 
     total = db.query(Staff).count()
     

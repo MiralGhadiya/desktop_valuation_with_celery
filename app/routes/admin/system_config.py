@@ -49,7 +49,10 @@ def create_config(
 
     logger.info(f"Config created: {config.config_key}")
 
-    return success_response(data=config)
+    return success_response(
+        data=config,
+        message="Config created successfully"
+    )
 
 
 @router.get("", response_model=APIResponse[PaginatedResponse[SystemConfigResponse]])
@@ -66,13 +69,11 @@ def list_configs(
 
     total = query.count()
 
-    configs = (
-        query
-        .order_by(SystemConfig.config_key.asc())
-        .offset((params["page"] - 1) * params["limit"])
-        .limit(params["limit"])
-        .all()
-    )
+    query = query.order_by(SystemConfig.config_key.asc())
+    if params["limit"] is not None:
+        query = query.offset((params["page"] - 1) * params["limit"]).limit(params["limit"])
+    
+    configs = query.all()
 
     return success_response(
         data={
@@ -93,7 +94,7 @@ def list_configs(
         },
         message="Configs fetched successfully",
     )
-    
+        
     
 @router.get("/{config_id}", response_model=APIResponse[SystemConfigResponse])
 def get_config(
@@ -106,7 +107,10 @@ def get_config(
     if not config:
         raise HTTPException(404, "Config not found")
 
-    return success_response(data=config)
+    return success_response(
+        data=config,
+        message="Config fetched successfully"
+    )
 
 
 @router.put("/{config_id}", response_model=APIResponse[SystemConfigResponse])
@@ -129,7 +133,10 @@ def update_config(
 
     logger.info(f"Config updated: {config.config_key}")
 
-    return success_response(data=config)
+    return success_response(
+        data=config,
+        message="Config updated successfully"
+    )
 
 
 @router.delete("/{config_id}", response_model=APIResponse[bool])
@@ -148,4 +155,7 @@ def delete_config(
 
     logger.info(f"Config deleted: {config.config_key}")
 
-    return success_response(data=True)
+    return success_response(
+        data=True,
+        message="Config deleted successfully"
+    )

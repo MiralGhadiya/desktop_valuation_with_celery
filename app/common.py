@@ -8,7 +8,7 @@ T = TypeVar("T")
 
 class Pagination(BaseModel):
     page: int = 1
-    limit: int = 10
+    limit: int | None = None
     total: int
 
 class PaginatedResponse(GenericModel, Generic[T]):

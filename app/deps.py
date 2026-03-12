@@ -141,7 +141,7 @@ def require_superuser(
 
 def pagination_params(
     page: int = Query(1, ge=1),
-    limit: int = Query(10000, ge=1),
+    limit: int | None = Query(None),
     search: str | None = Query(None),
     is_active: bool | None = Query(None),
 ):

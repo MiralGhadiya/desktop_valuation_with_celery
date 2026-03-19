@@ -91,7 +91,7 @@ async def create_valuation_form(
             ),
         )
 
-    if subscription.plan.country_code not in [detected_country, "DEFAULT"]:
+    if subscription.plan.country_code not in [detected_country, "GLOBAL", "DEFAULT"]:
         raise HTTPException(
             400,
             f"Resolved plan country ({subscription.plan.country_code}) "

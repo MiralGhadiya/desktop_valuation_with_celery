@@ -32,14 +32,26 @@ def get_plans_with_pricing(
     country: str,
     current_user: Optional[User] = None
 ):
+    from sqlalchemy import case
+
     plans = db.query(SubscriptionPlan).filter(
-        SubscriptionPlan.country_code == country,
+        (
+            (SubscriptionPlan.country_code == country) |
+            (SubscriptionPlan.country_code == "GLOBAL")
+        ),
         SubscriptionPlan.is_active == True,
+    ).order_by(
+        case(
+            (SubscriptionPlan.country_code == country, 0),  # local first
+            else_=1
+        ),
+        SubscriptionPlan.price.asc()
     ).all()
 
     if plans:
         return plans
 
+    # fallback to DEFAULT (with conversion)
     usd_plans = db.query(SubscriptionPlan).filter(
         SubscriptionPlan.country_code == "DEFAULT",
         SubscriptionPlan.currency == "USD",

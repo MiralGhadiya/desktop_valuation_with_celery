@@ -70,7 +70,7 @@ def get_my_active_plans(
         plans = (
             db.query(UserSubscription, Country)
             .join(SubscriptionPlan)
-            .join(Country, Country.country_code == SubscriptionPlan.country_code)
+            .outerjoin(Country, Country.country_code == SubscriptionPlan.country_code)
             .filter(
                 UserSubscription.user_id == current_user.id,
                 UserSubscription.is_active == True,
@@ -96,7 +96,11 @@ def get_my_active_plans(
             "subscription_id": s.id,
             "plan_name": s.plan.name,
             "country": s.plan.country_code,
-            "country_name": c.name,  
+            "country_name": (
+                "Global"
+                if s.plan.country_code == "GLOBAL"
+                else (c.name if c else None)
+            ),
             "price": s.plan.price,
             "currency": s.plan.currency,
             "max_reports": s.plan.max_reports,

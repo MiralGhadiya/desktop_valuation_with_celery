@@ -72,7 +72,11 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
     try:
         dial_code, country_code = get_country_from_mobile(user.mobile_number)
+    except ValueError as e:
+    # This will show exact phone validation error to user
+        raise HTTPException(status_code=400, detail=str(e))
 
+    try:
         country = country_service.get_country_by_dial_code(db, dial_code)
         if not country:
             country = country_service.create_country(

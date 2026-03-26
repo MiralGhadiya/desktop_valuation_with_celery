@@ -76,7 +76,7 @@ case "$service_name" in
     ;;
   beat)
     echo "Starting Celery beat..."
-    exec celery -A app.celery_app beat -l info --schedule /app/run/celerybeat-schedule
+    exec celery -A app.celery_app beat -l info --schedule run/celerybeat-schedule
     ;;
   *)
     echo "Unknown service: $service_name"
@@ -84,4 +84,3 @@ case "$service_name" in
     exit 1
     ;;
 esac
-

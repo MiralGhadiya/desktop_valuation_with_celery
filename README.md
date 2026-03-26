@@ -204,6 +204,7 @@ Notes about the container startup flow:
 - the API container runs `alembic upgrade head` before launching Uvicorn
 - Compose defaults `POSTGRES_HOST` to `postgres` and `REDIS_URL` to `redis://redis:6379/0`
 - Nginx listens on `NGINX_PORT` from `.env` and defaults to `80`
+- PM2 is not required for this deployment mode because Docker Compose already manages the running services
 
 ## Linux Server Deployment
 
@@ -264,6 +265,7 @@ python -m app.scripts.import_env_to_db
 
 ## Project Documents
 
+- `PROJECT_SETUP_INSTRUCTIONS.md`
 - `API_DOCUMENTATION.md`
 - `PROJECT_ARCHITECTURE.md`
 - `FLOW_DOCUMENTATION.md`

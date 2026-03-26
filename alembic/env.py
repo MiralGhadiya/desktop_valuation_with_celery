@@ -1,13 +1,13 @@
 from logging.config import fileConfig
+import logging
 
+from alembic import context
 from sqlalchemy import create_engine
 from sqlalchemy import pool
 
-from alembic import context
-
+import app.models
 from app.database.db import Base, get_database_connect_args, get_database_url
 
-import logging
 logging.getLogger("app_logger").disabled = True
 
 
@@ -30,18 +30,6 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-
-import app.models.auth
-import app.models.country
-import app.models.exchange_rate
-import app.models.feedback
-import app.models.feedback_message
-import app.models.subscription
-import app.models.user
-import app.models.valuation
-
-import app.models
-
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

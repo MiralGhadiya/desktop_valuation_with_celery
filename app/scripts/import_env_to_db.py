@@ -1,13 +1,9 @@
 from dotenv import dotenv_values
 from sqlalchemy.orm import Session
 
-from app.database.db import SessionLocal, Base, engine
+from app.database.db import SessionLocal
 from app.models.system_config import SystemConfig
 from app.utils.logger_config import app_logger as logger
-
-
-# Ensure tables exist
-Base.metadata.create_all(bind=engine)
 
 
 def import_env_variables():

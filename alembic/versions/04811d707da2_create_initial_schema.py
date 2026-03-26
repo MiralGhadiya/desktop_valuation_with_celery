@@ -1,18 +1,18 @@
-"""create users table
+"""create initial schema
 
-Revision ID: 812404447068
+Revision ID: 04811d707da2
 Revises: 
-Create Date: 2026-03-06 18:30:10.079710
+Create Date: 2026-03-26 11:14:51.492336
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '812404447068'
+revision: str = '04811d707da2'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -29,7 +29,6 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('country_code', name='uq_country_country_code'),
-    sa.UniqueConstraint('dial_code', name='uq_country_dial_code'),
     sa.UniqueConstraint('name', name='uq_country_name')
     )
     op.create_index(op.f('ix_countries_country_code'), 'countries', ['country_code'], unique=True)
@@ -43,6 +42,19 @@ def upgrade() -> None:
     sa.UniqueConstraint('currency_code')
     )
     op.create_index(op.f('ix_exchange_rates_id'), 'exchange_rates', ['id'], unique=False)
+    op.create_table('inquiries',
+    sa.Column('type', sa.Enum('CONTACT', 'SERVICE', name='inquiry_type'), nullable=False),
+    sa.Column('first_name', sa.String(), nullable=False),
+    sa.Column('last_name', sa.String(), nullable=True),
+    sa.Column('email', sa.String(), nullable=False),
+    sa.Column('phone_number', sa.String(), nullable=True),
+    sa.Column('message', sa.Text(), nullable=False),
+    sa.Column('services', postgresql.JSON(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_inquiries_id'), 'inquiries', ['id'], unique=False)
     op.create_table('subscription_plans',
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('country_code', sa.String(), nullable=False),
@@ -55,8 +67,25 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name', 'country_code', 'price', 'currency', 'max_reports', name='uq_subscription_plan_unique')
     )
+    op.create_index('ix_subscription_plans_country_active', 'subscription_plans', ['country_code', 'is_active'], unique=False)
     op.create_index(op.f('ix_subscription_plans_country_code'), 'subscription_plans', ['country_code'], unique=False)
     op.create_index(op.f('ix_subscription_plans_id'), 'subscription_plans', ['id'], unique=False)
+    op.create_table('subscription_settings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('subscription_duration_days', sa.Integer(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('system_config',
+    sa.Column('config_key', sa.String(length=150), nullable=False),
+    sa.Column('config_value', sa.Text(), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('config_key', name='uq_system_config_key')
+    )
+    op.create_index(op.f('ix_system_config_config_key'), 'system_config', ['config_key'], unique=True)
+    op.create_index(op.f('ix_system_config_id'), 'system_config', ['id'], unique=False)
     op.create_table('users',
     sa.Column('email', sa.String(), nullable=True),
     sa.Column('role', sa.String(), nullable=False),
@@ -107,7 +136,14 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_feedback_created_at'), 'feedback', ['created_at'], unique=False)
     op.create_index(op.f('ix_feedback_id'), 'feedback', ['id'], unique=False)
+    op.create_index(op.f('ix_feedback_status'), 'feedback', ['status'], unique=False)
+    op.create_index('ix_feedback_status_created_at', 'feedback', ['status', 'created_at'], unique=False)
+    op.create_index(op.f('ix_feedback_subscription_id'), 'feedback', ['subscription_id'], unique=False)
+    op.create_index('ix_feedback_user_created_at', 'feedback', ['user_id', 'created_at'], unique=False)
+    op.create_index(op.f('ix_feedback_user_id'), 'feedback', ['user_id'], unique=False)
+    op.create_index(op.f('ix_feedback_valuation_id'), 'feedback', ['valuation_id'], unique=False)
     op.create_table('password_reset_tokens',
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('token_hash', sa.String(), nullable=False),
@@ -141,6 +177,7 @@ def upgrade() -> None:
     sa.Column('can_access_dashboard', sa.Boolean(), nullable=True),
     sa.Column('can_access_reports', sa.Boolean(), nullable=True),
     sa.Column('can_access_subscriptions_plans', sa.Boolean(), nullable=True),
+    sa.Column('can_access_config', sa.Boolean(), nullable=True),
     sa.Column('user_id', sa.UUID(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
@@ -168,8 +205,16 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_user_subscriptions_active_expiry_window', 'user_subscriptions', ['is_active', 'is_expired', 'end_date'], unique=False)
+    op.create_index('ix_user_subscriptions_end_date', 'user_subscriptions', ['end_date'], unique=False)
     op.create_index(op.f('ix_user_subscriptions_id'), 'user_subscriptions', ['id'], unique=False)
+    op.create_index(op.f('ix_user_subscriptions_ip_country_code'), 'user_subscriptions', ['ip_country_code'], unique=False)
+    op.create_index(op.f('ix_user_subscriptions_payment_country_code'), 'user_subscriptions', ['payment_country_code'], unique=False)
+    op.create_index('ix_user_subscriptions_payment_status', 'user_subscriptions', ['payment_status'], unique=False)
     op.create_index(op.f('ix_user_subscriptions_plan_id'), 'user_subscriptions', ['plan_id'], unique=False)
+    op.create_index('ix_user_subscriptions_pricing_country_code', 'user_subscriptions', ['pricing_country_code'], unique=False)
+    op.create_index('ix_user_subscriptions_start_date', 'user_subscriptions', ['start_date'], unique=False)
+    op.create_index('ix_user_subscriptions_user_active_window', 'user_subscriptions', ['user_id', 'is_active', 'is_expired', 'start_date', 'end_date'], unique=False)
     op.create_index(op.f('ix_user_subscriptions_user_id'), 'user_subscriptions', ['user_id'], unique=False)
     op.create_table('valuation_jobs',
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -186,7 +231,15 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_valuation_jobs_country_code'), 'valuation_jobs', ['country_code'], unique=False)
+    op.create_index(op.f('ix_valuation_jobs_created_at'), 'valuation_jobs', ['created_at'], unique=False)
     op.create_index(op.f('ix_valuation_jobs_id'), 'valuation_jobs', ['id'], unique=False)
+    op.create_index(op.f('ix_valuation_jobs_status'), 'valuation_jobs', ['status'], unique=False)
+    op.create_index('ix_valuation_jobs_status_created_at', 'valuation_jobs', ['status', 'created_at'], unique=False)
+    op.create_index(op.f('ix_valuation_jobs_subscription_id'), 'valuation_jobs', ['subscription_id'], unique=False)
+    op.create_index('ix_valuation_jobs_user_created_at', 'valuation_jobs', ['user_id', 'created_at'], unique=False)
+    op.create_index(op.f('ix_valuation_jobs_user_id'), 'valuation_jobs', ['user_id'], unique=False)
+    op.create_index(op.f('ix_valuation_jobs_valuation_id'), 'valuation_jobs', ['valuation_id'], unique=False)
     op.create_table('feedback_messages',
     sa.Column('feedback_id', sa.UUID(), nullable=False),
     sa.Column('sender', sa.Enum('USER', 'ADMIN', name='feedback_sender'), nullable=False),
@@ -212,7 +265,14 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_valuation_reports_category'), 'valuation_reports', ['category'], unique=False)
+    op.create_index(op.f('ix_valuation_reports_country_code'), 'valuation_reports', ['country_code'], unique=False)
+    op.create_index('ix_valuation_reports_country_created_at', 'valuation_reports', ['country_code', 'created_at'], unique=False)
+    op.create_index(op.f('ix_valuation_reports_created_at'), 'valuation_reports', ['created_at'], unique=False)
     op.create_index(op.f('ix_valuation_reports_id'), 'valuation_reports', ['id'], unique=False)
+    op.create_index(op.f('ix_valuation_reports_subscription_id'), 'valuation_reports', ['subscription_id'], unique=False)
+    op.create_index('ix_valuation_reports_user_created_at', 'valuation_reports', ['user_id', 'created_at'], unique=False)
+    op.create_index(op.f('ix_valuation_reports_user_id'), 'valuation_reports', ['user_id'], unique=False)
     op.create_index(op.f('ix_valuation_reports_valuation_id'), 'valuation_reports', ['valuation_id'], unique=True)
     # ### end Alembic commands ###
 
@@ -221,22 +281,52 @@ def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index(op.f('ix_valuation_reports_valuation_id'), table_name='valuation_reports')
+    op.drop_index(op.f('ix_valuation_reports_user_id'), table_name='valuation_reports')
+    op.drop_index('ix_valuation_reports_user_created_at', table_name='valuation_reports')
+    op.drop_index(op.f('ix_valuation_reports_subscription_id'), table_name='valuation_reports')
     op.drop_index(op.f('ix_valuation_reports_id'), table_name='valuation_reports')
+    op.drop_index(op.f('ix_valuation_reports_created_at'), table_name='valuation_reports')
+    op.drop_index('ix_valuation_reports_country_created_at', table_name='valuation_reports')
+    op.drop_index(op.f('ix_valuation_reports_country_code'), table_name='valuation_reports')
+    op.drop_index(op.f('ix_valuation_reports_category'), table_name='valuation_reports')
     op.drop_table('valuation_reports')
     op.drop_index(op.f('ix_feedback_messages_id'), table_name='feedback_messages')
     op.drop_table('feedback_messages')
+    op.drop_index(op.f('ix_valuation_jobs_valuation_id'), table_name='valuation_jobs')
+    op.drop_index(op.f('ix_valuation_jobs_user_id'), table_name='valuation_jobs')
+    op.drop_index('ix_valuation_jobs_user_created_at', table_name='valuation_jobs')
+    op.drop_index(op.f('ix_valuation_jobs_subscription_id'), table_name='valuation_jobs')
+    op.drop_index('ix_valuation_jobs_status_created_at', table_name='valuation_jobs')
+    op.drop_index(op.f('ix_valuation_jobs_status'), table_name='valuation_jobs')
     op.drop_index(op.f('ix_valuation_jobs_id'), table_name='valuation_jobs')
+    op.drop_index(op.f('ix_valuation_jobs_created_at'), table_name='valuation_jobs')
+    op.drop_index(op.f('ix_valuation_jobs_country_code'), table_name='valuation_jobs')
     op.drop_table('valuation_jobs')
     op.drop_index(op.f('ix_user_subscriptions_user_id'), table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_user_active_window', table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_start_date', table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_pricing_country_code', table_name='user_subscriptions')
     op.drop_index(op.f('ix_user_subscriptions_plan_id'), table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_payment_status', table_name='user_subscriptions')
+    op.drop_index(op.f('ix_user_subscriptions_payment_country_code'), table_name='user_subscriptions')
+    op.drop_index(op.f('ix_user_subscriptions_ip_country_code'), table_name='user_subscriptions')
     op.drop_index(op.f('ix_user_subscriptions_id'), table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_end_date', table_name='user_subscriptions')
+    op.drop_index('ix_user_subscriptions_active_expiry_window', table_name='user_subscriptions')
     op.drop_table('user_subscriptions')
     op.drop_table('staff')
     op.drop_index(op.f('ix_refresh_tokens_id'), table_name='refresh_tokens')
     op.drop_table('refresh_tokens')
     op.drop_index(op.f('ix_password_reset_tokens_id'), table_name='password_reset_tokens')
     op.drop_table('password_reset_tokens')
+    op.drop_index(op.f('ix_feedback_valuation_id'), table_name='feedback')
+    op.drop_index(op.f('ix_feedback_user_id'), table_name='feedback')
+    op.drop_index('ix_feedback_user_created_at', table_name='feedback')
+    op.drop_index(op.f('ix_feedback_subscription_id'), table_name='feedback')
+    op.drop_index('ix_feedback_status_created_at', table_name='feedback')
+    op.drop_index(op.f('ix_feedback_status'), table_name='feedback')
     op.drop_index(op.f('ix_feedback_id'), table_name='feedback')
+    op.drop_index(op.f('ix_feedback_created_at'), table_name='feedback')
     op.drop_table('feedback')
     op.drop_index(op.f('ix_email_verification_tokens_id'), table_name='email_verification_tokens')
     op.drop_table('email_verification_tokens')
@@ -247,9 +337,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email_verified_at'), table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
+    op.drop_index(op.f('ix_system_config_id'), table_name='system_config')
+    op.drop_index(op.f('ix_system_config_config_key'), table_name='system_config')
+    op.drop_table('system_config')
+    op.drop_table('subscription_settings')
     op.drop_index(op.f('ix_subscription_plans_id'), table_name='subscription_plans')
     op.drop_index(op.f('ix_subscription_plans_country_code'), table_name='subscription_plans')
+    op.drop_index('ix_subscription_plans_country_active', table_name='subscription_plans')
     op.drop_table('subscription_plans')
+    op.drop_index(op.f('ix_inquiries_id'), table_name='inquiries')
+    op.drop_table('inquiries')
     op.drop_index(op.f('ix_exchange_rates_id'), table_name='exchange_rates')
     op.drop_table('exchange_rates')
     op.drop_index(op.f('ix_countries_id'), table_name='countries')

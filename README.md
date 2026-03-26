@@ -271,6 +271,5 @@ python -m app.scripts.import_env_to_db
 
 ## Notes
 
-- In non-production environments, `app/main.py` calls `Base.metadata.create_all(...)` on startup.
-- In production-style usage, prefer running Alembic migrations explicitly and keeping `ENV=production`.
+- Database schema is migration-first: run `alembic upgrade head` before app bootstrap scripts if you are not using Docker startup.
 - `docker-compose.yml`, `Dockerfile`, and `start.sh` are aligned around the Docker workflow described above.

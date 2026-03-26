@@ -7,7 +7,7 @@ from dotenv import dotenv_values, load_dotenv
 from sqlalchemy.orm import Session
 
 from app.auth import pwd_context
-from app.database.db import Base, SessionLocal, engine
+from app.database.db import SessionLocal
 from app.models import User
 from app.models.country import Country
 from app.models.subscription_settings import SubscriptionSettings
@@ -17,9 +17,6 @@ from app.utils.phone import get_country_from_mobile
 
 
 load_dotenv()
-
-# Ensure tables exist
-Base.metadata.create_all(bind=engine)
 
 
 def import_env_variables(db: Session):

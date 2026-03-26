@@ -1,9 +1,7 @@
-import os
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database.db import engine, Base
 from app.core.config_manager import load_config, start_listener_thread
 from app.routes import auth as user_auth, valuation, subscription, payment, user_feedback, inquiry
 from app.routes.admin import (
@@ -27,11 +25,6 @@ from app.utils.logger_config import app_logger as logger
 
 
 logger.info("Starting Desktop Valuation API")
-
-if os.getenv("ENV") != "production":
-    Base.metadata.create_all(bind=engine)
-
-logger.info("Database tables ensured")
 
 app = FastAPI(title="Desktop Valuation API")
 

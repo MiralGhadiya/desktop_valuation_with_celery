@@ -1,8 +1,7 @@
 #app/models/feedback.py
 
-import uuid
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database.mixins import UUIDPrimaryKeyMixin
@@ -11,8 +10,12 @@ from app.database.db import Base
 
 class Feedback(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "feedback"
+    __table_args__ = (
+        Index("ix_feedback_user_created_at", "user_id", "created_at"),
+        Index("ix_feedback_status_created_at", "status", "created_at"),
+    )
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
 
     type = Column(
         Enum(
@@ -30,8 +33,8 @@ class Feedback(UUIDPrimaryKeyMixin, Base):
 
     rating = Column(Integer, nullable=True)  # 1–5
 
-    valuation_id = Column(String, nullable=True)
-    subscription_id = Column(UUID(as_uuid=True), nullable=True)
+    valuation_id = Column(String, nullable=True, index=True)
+    subscription_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
     status = Column(
         Enum(
@@ -41,12 +44,13 @@ class Feedback(UUIDPrimaryKeyMixin, Base):
             "CLOSED",
             name="feedback_status"
         ),
-        default="OPEN"
+        default="OPEN",
+        index=True,
     )
 
     admin_note = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
     
-    user = relationship("User", backref="feedbacks")
+    user = relationship("User", backref="feedbacks", lazy="selectin")

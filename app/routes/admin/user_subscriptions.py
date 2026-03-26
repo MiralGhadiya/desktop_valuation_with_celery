@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.deps import get_db, require_management, require_superuser, pagination_params
+from app.deps import get_db, require_management, pagination_params
 
 from app.models import User
 from app.models.subscription import SubscriptionPlan, UserSubscription
@@ -29,8 +29,8 @@ router = APIRouter(
 class UserSubscriptionFilters:
     def __init__(
         self,
-        user_id: Optional[int] = Query(None),
-        plan_id: Optional[int] = Query(None),
+        user_id: Optional[UUID] = Query(None),
+        plan_id: Optional[UUID] = Query(None),
         is_active: Optional[bool] = Query(None),
         is_expired: Optional[bool] = Query(None),
         payment_status: Optional[str] = Query(None),
@@ -80,7 +80,17 @@ def list_all_user_subscriptions(
         raise HTTPException(400, "Invalid date range")
     
     query = (
-        db.query(UserSubscription)
+        db.query(
+            UserSubscription.id,
+            UserSubscription.user_id,
+            UserSubscription.plan_id,
+            SubscriptionPlan.name.label("plan_name"),
+            UserSubscription.pricing_country_code,
+            UserSubscription.start_date,
+            UserSubscription.end_date,
+            UserSubscription.reports_used,
+            UserSubscription.is_active,
+        )
         .join(SubscriptionPlan)
     )
 
@@ -153,7 +163,7 @@ def list_all_user_subscriptions(
             UserSubscription.start_date >= start_date
         )
         
-    total = query.count()
+    total = query.order_by(None).count()
 
     if params["limit"] is not None:
         subs = (
@@ -171,25 +181,25 @@ def list_all_user_subscriptions(
     return success_response(
         data={
             "data": [
-                UserSubscriptionResponse(
-                    id=s.id,
-                    user_id=s.user_id,
-                    plan_id=s.plan_id,
-                    plan_name=s.plan.name,
-                    pricing_country_code=s.pricing_country_code,
-                    start_date=s.start_date,
-                    end_date=s.end_date,
-                    reports_used=s.reports_used,
-                    is_active=s.is_active,
-                )
-            for s in subs
-        ],
-        "pagination": {
-            "page": params["page"],
-            "limit": params["limit"],
-            "total": total,
+                {
+                    "id": subscription.id,
+                    "user_id": subscription.user_id,
+                    "plan_id": subscription.plan_id,
+                    "plan_name": subscription.plan_name,
+                    "pricing_country_code": subscription.pricing_country_code,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "reports_used": subscription.reports_used,
+                    "is_active": subscription.is_active,
+                }
+                for subscription in subs
+            ],
+            "pagination": {
+                "page": params["page"],
+                "limit": params["limit"],
+                "total": total,
+            },
         },
-    },
         message="User subscriptions fetched successfully"
     )
     
@@ -213,7 +223,7 @@ def get_user_subscriptions(
         f"search={params['search']}"
     )
     
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.get(User, user_id)
     if not user:
         logger.warning(f"User not found while fetching subscriptions user_id={user_id}")
         raise HTTPException(404, "User not found")
@@ -222,7 +232,17 @@ def get_user_subscriptions(
         raise HTTPException(400, "Invalid date range")
         
     query = (
-        db.query(UserSubscription)
+        db.query(
+            UserSubscription.id,
+            UserSubscription.user_id,
+            UserSubscription.plan_id,
+            SubscriptionPlan.name.label("plan_name"),
+            UserSubscription.pricing_country_code,
+            UserSubscription.start_date,
+            UserSubscription.end_date,
+            UserSubscription.reports_used,
+            UserSubscription.is_active,
+        )
         .join(SubscriptionPlan)
         .filter(UserSubscription.user_id == user_id)
     )
@@ -257,7 +277,7 @@ def get_user_subscriptions(
             UserSubscription.start_date <= start_to
         )
     
-    total = query.count()
+    total = query.order_by(None).count()
 
     if params["limit"] is not None:
         subs = (
@@ -277,25 +297,25 @@ def get_user_subscriptions(
     return success_response(
         data={
             "data": [
-                UserSubscriptionResponse(
-                    id=s.id,
-                    user_id=s.user_id,
-                    plan_id=s.plan_id,
-                    plan_name=s.plan.name,
-                    pricing_country_code=s.pricing_country_code,
-                    start_date=s.start_date,
-                    end_date=s.end_date,
-                    reports_used=s.reports_used,
-                    is_active=s.is_active,
-            )
-            for s in subs
-        ],
-        "pagination": {
-            "page": params["page"],
-            "limit": params["limit"],
-            "total": total,
-        }
-    },
+                {
+                    "id": subscription.id,
+                    "user_id": subscription.user_id,
+                    "plan_id": subscription.plan_id,
+                    "plan_name": subscription.plan_name,
+                    "pricing_country_code": subscription.pricing_country_code,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "reports_used": subscription.reports_used,
+                    "is_active": subscription.is_active,
+                }
+                for subscription in subs
+            ],
+            "pagination": {
+                "page": params["page"],
+                "limit": params["limit"],
+                "total": total,
+            }
+        },
         message="User subscriptions fetched successfully"
     )
 
@@ -312,14 +332,14 @@ def assign_subscription_to_user(
         f"plan_id={data.plan_id} duration_days={data.duration_days}"
     )
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.get(User, user_id)
     if not user:
         logger.warning(f"User not found while assigning subscription user_id={user_id}")
         raise HTTPException(404, "User not found")
 
     plan = db.query(SubscriptionPlan).filter(
         SubscriptionPlan.id == data.plan_id,
-        SubscriptionPlan.is_active == True
+        SubscriptionPlan.is_active.is_(True)
     ).first()
 
     if not plan:
@@ -379,9 +399,7 @@ def update_user_subscription(
 ):
     logger.info(f"Admin updating subscription sub_id={subscription_id}")
 
-    sub = db.query(UserSubscription).filter(
-        UserSubscription.id == subscription_id
-    ).first()
+    sub = db.get(UserSubscription, subscription_id)
     
     if not sub:
         raise HTTPException(404, "Subscription not found")
@@ -427,9 +445,7 @@ def cancel_subscription(
 ):
     logger.info(f"Admin cancelling subscription sub_id={subscription_id}")
 
-    sub = db.query(UserSubscription).filter(
-        UserSubscription.id == subscription_id
-    ).first()
+    sub = db.get(UserSubscription, subscription_id)
 
     if not sub:
         logger.warning(f"Subscription not found during cancel sub_id={subscription_id}")

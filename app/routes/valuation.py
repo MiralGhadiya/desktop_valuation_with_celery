@@ -16,17 +16,16 @@ from fastapi import (
     Query,
     Request,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer_group
 from sqlalchemy import or_
 
 from app.database.db import get_db
 from app.common import PaginatedResponse
 from app.deps import get_current_user, pagination_params
-from app.models.country import Country
 from app.tasks.valuation_tasks import process_valuation_job, send_report_email_task
 from app.services.subscription_service import get_usable_subscription_with_fallback
 
-from app.models import User, ValuationReport, subscription
+from app.models import User, ValuationReport
 from app.models.valuation import (
     DesktopValuationForm,
     ValuationJob,
@@ -155,8 +154,14 @@ def my_valuations(
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
 ):
-    query = db.query(ValuationReport).filter(
-        ValuationReport.user_id == current_user.id
+    query = (
+        db.query(
+            ValuationReport.valuation_id,
+            ValuationReport.category,
+            ValuationReport.country_code,
+            ValuationReport.created_at,
+        )
+        .filter(ValuationReport.user_id == current_user.id)
     )
 
     if category:
@@ -184,7 +189,7 @@ def my_valuations(
         to_date,
     )
 
-    total = query.count()
+    total = query.order_by(None).count()
 
     query = query.order_by(ValuationReport.created_at.desc())
     if params["limit"] is not None:
@@ -221,6 +226,7 @@ def get_valuation(
 ):
     valuation = (
         db.query(ValuationReport)
+        .options(undefer_group("valuation_payload"))
         .filter(
             ValuationReport.valuation_id == valuation_id,
             ValuationReport.user_id == current_user.id,
@@ -273,7 +279,10 @@ def get_job_status(
 
     # Completed → return EXACT old response structure
     valuation = (
-        db.query(ValuationReport)
+        db.query(
+            ValuationReport.valuation_id,
+            ValuationReport.report_context,
+        )
         .filter(
             ValuationReport.valuation_id == job.valuation_id,
             ValuationReport.user_id == current_user.id,

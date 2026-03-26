@@ -3,7 +3,7 @@
 from uuid import UUID
 from sqlalchemy import or_
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from fastapi import APIRouter, Depends, Query, HTTPException
 
 from app.models.feedback import Feedback
@@ -15,7 +15,7 @@ from app.common import PaginatedResponse
 from app.utils.email import send_feedback_reply_email
 from app.utils.response import APIResponse, success_response
 
-from app.deps import get_db, require_superuser, pagination_params, require_management
+from app.deps import get_db, pagination_params, require_management
 
 from app.utils.logger_config import app_logger as logger
 
@@ -34,19 +34,32 @@ def list_feedback(
     _: None = Depends(require_management),
     params: dict = Depends(pagination_params),
 
-    user_id: Optional[int] = Query(None),
+    user_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
     rating: Optional[int] = Query(None),
     valuation_id: Optional[str] = Query(None),
-    subscription_id: Optional[int] = Query(None),
+    subscription_id: Optional[UUID] = Query(None),
 ):
     logger.info(
         "Admin listing feedback "
         f"page={params['page']} status={status} type={type}"
     )
 
-    query = db.query(Feedback)
+    query = db.query(Feedback).options(
+        load_only(
+            Feedback.id,
+            Feedback.type,
+            Feedback.subject,
+            Feedback.message,
+            Feedback.rating,
+            Feedback.status,
+            Feedback.created_at,
+            Feedback.user_id,
+            Feedback.valuation_id,
+            Feedback.subscription_id,
+        )
+    )
     
     if user_id:
         query = query.filter(Feedback.user_id == user_id)
@@ -76,7 +89,7 @@ def list_feedback(
     if subscription_id:
         query = query.filter(Feedback.subscription_id == subscription_id)
 
-    total = query.count()
+    total = query.order_by(None).count()
 
     # apply pagination safely
     if params["limit"] is not None:
@@ -114,9 +127,7 @@ def admin_feedback_action(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
-    feedback = db.query(Feedback).filter(
-        Feedback.id == feedback_id
-    ).first()
+    feedback = db.get(Feedback, feedback_id)
 
     if not feedback:
         raise HTTPException(404, "Feedback not found")
@@ -164,9 +175,7 @@ def get_feedback_by_id(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
-    feedback = db.query(Feedback).filter(
-        Feedback.id == feedback_id
-    ).first()
+    feedback = db.get(Feedback, feedback_id)
 
     if not feedback:
         raise HTTPException(404, "Feedback not found")
@@ -180,9 +189,7 @@ def delete_feedback(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
-    feedback = db.query(Feedback).filter(
-        Feedback.id == feedback_id
-    ).first()
+    feedback = db.get(Feedback, feedback_id)
 
     if not feedback:
         raise HTTPException(404, "Feedback not found")

@@ -1,25 +1,27 @@
 FROM python:3.10-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Install system deps
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && python -m playwright install --with-deps chromium
 
-# Copy project
 COPY . .
 
-# Make start script executable
-RUN chmod +x start.sh
+RUN mkdir -p /app/generated_reports /app/uploads /app/app/logs /app/run \
+    && chmod +x /app/start.sh
 
 EXPOSE 8000
 
-CMD ["./start.sh"]
+CMD ["./start.sh", "api"]

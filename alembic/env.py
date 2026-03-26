@@ -1,11 +1,11 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
 
-from app.database.db import Base
+from app.database.db import Base, get_database_connect_args, get_database_url
 
 import logging
 logging.getLogger("app_logger").disabled = True
@@ -55,7 +55,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_database_url()
+    config.set_main_option("sqlalchemy.url", url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -68,22 +69,13 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    import os
-    from dotenv import load_dotenv
+    database_url = get_database_url()
+    config.set_main_option("sqlalchemy.url", database_url)
 
-    load_dotenv()
-
-    DATABASE_URL = os.getenv("DATABASE_URL")
-
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not set")
-
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        database_url,
         poolclass=pool.NullPool,
+        connect_args=get_database_connect_args(database_url),
     )
 
     with connectable.connect() as connection:

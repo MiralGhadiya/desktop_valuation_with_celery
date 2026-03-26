@@ -60,6 +60,7 @@ def build_calculation_input(user_input: dict):
 )
 def process_valuation_job(self, job_id: str):
     db = SessionLocal()
+    job = None
     try:
         job = db.query(ValuationJob).filter(ValuationJob.id == job_id).first()
         if not job:
@@ -245,7 +246,7 @@ def process_valuation_job(self, job_id: str):
         if not subscription:
             raise RuntimeError("Subscription not found for job")
 
-        increment_usage(db, subscription)
+        increment_usage(db, subscription, commit=False)
 
         job.status = "completed"
         job.valuation_id = valuation_id
@@ -255,9 +256,12 @@ def process_valuation_job(self, job_id: str):
         logger.info(f"Valuation completed job_id={job_id}")
 
     except Exception as e:
-        job.status = "failed"
-        job.error_message = str(e)
-        db.commit()
+        db.rollback()
+        failed_job = db.query(ValuationJob).filter(ValuationJob.id == job_id).first()
+        if failed_job:
+            failed_job.status = "failed"
+            failed_job.error_message = str(e)
+            db.commit()
         logger.exception(f"Valuation failed job_id={job_id}")
         raise
     finally:

@@ -1,124 +1,276 @@
 # Desktop Valuation Platform
 
-**Desktop Valuation** is a comprehensive FastAPI-based platform that provides automated property valuation services with subscription management, payment processing, and administrative capabilities. The platform serves users across multiple countries with localized pricing, currency conversion, and property-specific valuations using AI/LLM integration.
+Desktop Valuation is a FastAPI application for generating property valuations, managing subscriptions, handling payments, and running admin operations. The project uses PostgreSQL for persistence, Redis plus Celery for background jobs, and Docker Compose for full-stack deployment.
 
-## Key Features
-- **User Authentication**: Email-based registration with verification and password management.
-- **Property Valuations**: AI-powered property valuation generation with detailed PDF reports.
-- **Subscription Management**: Multi-tier subscription plans with country-specific pricing.
-- **Payment Processing**: Razorpay integration for secure payment handling.
-- **Admin Dashboard**: Comprehensive admin panel for user, staff, subscription, inquiry, feedback, and valuation management.
-- **Async Processing**: Celery-based background task processing for valuations and notifications.
-- **Multi-Country Support**: Automatic IP-based country detection, localized pricing, and currency conversion.
-- **Public Inquiries & Feedback**: Direct channels for users and visitors to communicate with administrators.
+## Core Features
 
-## Technology Stack
-- **Backend**: FastAPI
-- **Database**: PostgreSQL & SQLAlchemy (with Alembic for migrations)
-- **Async Processing**: Celery & Redis
-- **AI/LLM**: OpenAI
-- **Payments**: Razorpay
-- **PDF Generation**: Custom report builder
+- User registration, login, email verification, and password flows
+- AI-assisted property valuation generation
+- PDF valuation report generation
+- Subscription plans and country-aware pricing
+- Razorpay payment integration
+- Admin endpoints for users, staff, valuations, subscriptions, inquiries, feedback, countries, and system configuration
+- Background jobs for valuations, subscription expiry, reminders, and exchange-rate updates
 
-## Setup and Installation
+## Tech Stack
 
-### Prerequisites
-- Python 3.9+
-- PostgreSQL 12+
-- Redis 6+
-- SMTP Server details
-- API Keys: Razorpay, OpenAI
+- FastAPI
+- SQLAlchemy + Alembic
+- PostgreSQL
+- Redis
+- Celery
+- OpenAI and Gemini integrations
+- Nginx + Docker Compose
 
-### Installation Steps
+## Prerequisites
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository>
-   cd property-main
-   ```
+- Python 3.10+ recommended
+- PostgreSQL
+- Redis
+- A populated `.env` file
 
-2. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+For Docker deployment on a Linux server, you only need:
 
-3. **Install the dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+- Docker
+- Docker Compose plugin (`docker compose`)
+- A populated `.env` file
 
-4. **Environment Configuration:**
-   Create a `.env` file in the root directory and add the following:
-   ```env
-   root@desktopvaluation:/var/www/property# cat .env
-   DATABASE_URL=postgresql://username:password@host/desktop_db
-   REDIS_URL=redis://localhost:6379/0
-   JWT_SECRET_KEY= *******
-   ALGORITHM= "HS256"
-   RAZORPAY_KEY_ID=rzp_teou******6KmZ
-   RAZORPAY_KEY_SECRET=O6V******wW31ZTG
-   OPENAI_API_KEY=sk
-   SMTP_SERVER=smtp.gmail.com
-   SMTP_PORT=587
-   EMAIL_USER=miral.g.evenmore@gmail.com
-   EMAIL_PASSWORD=ekm******cuyfka
-   IPINFO_TOKEN=9a******c5bf7aa
-   BASE_URL=http://192.168.1.90
-   FRONTEND_URL=http://192.168.1.73:5173
-   EXCHANGE_RATE_API_KEY=5cc66********aa6744
-   GOOGLE_MAPS_API_KEY="AIzaSyB6UWT********_Gh4JgBsIYkg"
-   GOOGLE_CLIENT_ID=339380282766-******.com
-   ```
+## Environment Configuration
 
-5. **Run Database Migrations:**
-   ```bash
-   alembic upgrade head
-   ```
+Copy `.env.example` to `.env` and fill in the required values.
 
-6. **Initialize Database (Single Script):**
-   ```bash
-   python app/scripts/setup_project.py
-   ```
-   **or**
-   ```bash
-   python -m app.scripts.setup_project
-   ```
+Use standard `KEY=value` formatting in `.env` with no spaces around `=`, because Docker Compose env files are stricter than Python dotenv parsing.
 
-## What the Setup Script Does
+The app supports two database configuration styles:
 
-**This will:**
+1. Set `DATABASE_URL`
+2. Leave `DATABASE_URL` empty and use `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`
 
-- Import .env variables to db
+Important variables:
 
-- Import countries to db
+- `ENV`
+- `DATABASE_URL` or the full `POSTGRES_*` set
+- `REDIS_URL`
+- `JWT_SECRET_KEY`
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `EMAIL_USER`
+- `EMAIL_PASSWORD`
+- `ADMIN_FEEDBACK_EMAILS`
+- `BASE_URL`
+- `FRONTEND_URL`
+- `IPINFO_TOKEN`
+- `EXCHANGE_RATE_API_KEY`
+- `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_CLIENT_ID`
 
-- Add subscription duration in days to db
+If you want Docker Compose to use the bundled `postgres` service, leave `DATABASE_URL` empty or commented out. Otherwise the app will keep connecting to the external database URL from `.env`.
 
-- Create the first admin user
+`POSTGRES_SSLMODE`, `POSTGRES_CONNECT_TIMEOUT`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and `DB_POOL_RECYCLE` are also supported for production-style database connections.
 
-## Running the Application
+## Local Development Setup
 
-Open separate terminals to run the various components of the architecture:
+1. Create and activate a virtual environment.
 
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
-1. **Start the Celery worker (for background tasks like valuations and emails):**
-   ```bash
-   celery -A app.celery_app worker -l info
-   ```
+Windows PowerShell:
 
-2. **Start the Celery Beat scheduler (for subscriptions expiry and daily exchange rates):**
-   ```bash
-   celery -A app.celery_app beat -l info
-   ```
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
 
-3. **Start the FastAPI server:**
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
+2. Install dependencies.
 
+```bash
+pip install -r requirements.txt
+```
 
-## Documentation
-- Detailed API Specs: see `API_DOCUMENTATION.md`
-- Architecture & Models: see `PROJECT_ARCHITECTURE.md`
-- Application Workflows: see `FLOW_DOCUMENTATION.md` and `PROJECT_FLOW_DOCUMENTATION.md`
+3. Create your environment file.
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+4. Make sure PostgreSQL and Redis are running and that `.env` points to them.
+
+5. Run database migrations.
+
+```bash
+alembic upgrade head
+```
+
+6. Run the initial project bootstrap script.
+
+```bash
+python -m app.scripts.setup_project
+```
+
+This script:
+
+- imports values from `.env` into the `system_config` table
+- imports countries from `data - data.csv.csv`
+- creates default subscription settings
+- prompts you to create the first superuser
+
+7. Start the API server.
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+8. Start Celery worker and beat in separate terminals.
+
+```bash
+celery -A app.celery_app worker -l info
+```
+
+```bash
+celery -A app.celery_app beat -l info
+```
+
+## Local URLs
+
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## Docker Compose Setup
+
+The repository includes services for:
+
+- `postgres`
+- `redis`
+- `api`
+- `celery_worker`
+- `celery_beat`
+- `nginx`
+
+This Compose stack is prepared for Linux server deployment:
+
+- only Nginx is exposed publicly by default
+- PostgreSQL and Redis stay on the internal Docker network
+- database, Redis data, uploads, generated reports, Celery beat state, and app logs are persisted in Docker volumes
+- the API waits for PostgreSQL and Redis before starting
+- the API runs Alembic migrations automatically on startup
+
+Start everything with:
+
+```bash
+docker compose up -d --build
+```
+
+Check service status with:
+
+```bash
+docker compose ps
+```
+
+Follow logs with:
+
+```bash
+docker compose logs -f api
+docker compose logs -f celery_worker
+docker compose logs -f celery_beat
+```
+
+After the stack is up, run the one-time bootstrap inside the API container:
+
+```bash
+docker compose exec api python -m app.scripts.setup_project
+```
+
+Useful URLs with the default Compose setup:
+
+- App via Nginx: `http://localhost`
+- Swagger UI via Nginx: `http://localhost/docs`
+
+Notes about the container startup flow:
+
+- `start.sh` is shared by the API, Celery worker, and Celery beat containers
+- `start.sh` waits for PostgreSQL and Redis before starting the process
+- the API container runs `alembic upgrade head` before launching Uvicorn
+- Compose defaults `POSTGRES_HOST` to `postgres` and `REDIS_URL` to `redis://redis:6379/0`
+- Nginx listens on `NGINX_PORT` from `.env` and defaults to `80`
+
+## Linux Server Deployment
+
+1. Install Docker and the Docker Compose plugin on the server.
+2. Copy the project to the server.
+3. Create `.env` from `.env.example`.
+4. If you want to use the PostgreSQL container from this project, comment out or empty `DATABASE_URL`.
+5. Set at least these values in `.env`:
+
+- `ENV=production`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `REDIS_URL=redis://redis:6379/0`
+- `BASE_URL`
+- `FRONTEND_URL`
+- `JWT_SECRET_KEY`
+
+6. Build and start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+7. Run the first-time bootstrap:
+
+```bash
+docker compose exec api python -m app.scripts.setup_project
+```
+
+8. If your server has a firewall, allow the Nginx port you configured, usually `80`.
+
+To stop the stack:
+
+```bash
+docker compose down
+```
+
+To stop it and also remove the persisted Docker volumes:
+
+```bash
+docker compose down -v
+```
+
+## Common Management Commands
+
+Create a superuser only:
+
+```bash
+python -m app.scripts.create_superuser
+```
+
+Import `.env` values into the database only:
+
+```bash
+python -m app.scripts.import_env_to_db
+```
+
+## Project Documents
+
+- `API_DOCUMENTATION.md`
+- `PROJECT_ARCHITECTURE.md`
+- `FLOW_DOCUMENTATION.md`
+- `PROJECT_FLOW_DOCUMENTATION.md`
+
+## Notes
+
+- In non-production environments, `app/main.py` calls `Base.metadata.create_all(...)` on startup.
+- In production-style usage, prefer running Alembic migrations explicitly and keeping `ENV=production`.
+- `docker-compose.yml`, `Dockerfile`, and `start.sh` are aligned around the Docker workflow described above.

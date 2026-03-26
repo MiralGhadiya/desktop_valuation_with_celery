@@ -1,16 +1,17 @@
 #app/services/subscription_service.py
 
-import pandas as pd
+from datetime import datetime, time, timedelta, timezone
 from io import BytesIO
 from typing import List
-from sqlalchemy import case
+from uuid import UUID
+
+import pandas as pd
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from sqlalchemy import case
+from sqlalchemy.orm import Session, contains_eager, load_only, selectinload
 
-from app.utils.email import send_subscription_expiry_email
 from app.models.subscription import SubscriptionPlan, UserSubscription
-
+from app.utils.email import send_subscription_expiry_email
 from app.utils.logger_config import app_logger as logger
 
 
@@ -25,7 +26,7 @@ PLAN_FEATURE_PRIORITY = {
 }
 
 
-def to_utc_aware(dt):
+def to_utc_aware(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -39,7 +40,7 @@ def get_plan_priority(plan_name: str) -> int:
 
 def _base_usable_subscription_query(
     db: Session,
-    user_id: int,
+    user_id: UUID,
     country_code: str,
 ):
     now = datetime.now(timezone.utc)
@@ -47,14 +48,24 @@ def _base_usable_subscription_query(
     return (
         db.query(UserSubscription)
         .join(SubscriptionPlan)
+        .options(
+            contains_eager(UserSubscription.plan).load_only(
+                SubscriptionPlan.id,
+                SubscriptionPlan.name,
+                SubscriptionPlan.country_code,
+                SubscriptionPlan.price,
+                SubscriptionPlan.max_reports,
+                SubscriptionPlan.is_active,
+            )
+        )
         .filter(
             UserSubscription.user_id == user_id,
-            UserSubscription.is_active == True,
-            UserSubscription.is_expired == False,
+            UserSubscription.is_active.is_(True),
+            UserSubscription.is_expired.is_(False),
             UserSubscription.start_date <= now,
             UserSubscription.end_date >= now,
             SubscriptionPlan.country_code == country_code,
-            SubscriptionPlan.is_active == True,
+            SubscriptionPlan.is_active.is_(True),
         )
         .order_by(
             case(
@@ -72,7 +83,7 @@ def _base_usable_subscription_query(
 
 def get_active_subscription(
     db: Session,
-    user_id: int,
+    user_id: UUID,
     country_code: str,
 ):
     logger.debug(
@@ -117,8 +128,8 @@ def get_active_subscription(
 def enforce_subscription(
     *,
     db: Session,
-    user_id: int,
-    subscription_id: int,
+    user_id: UUID,
+    subscription_id: UUID,
 ):
     logger.info(
         f"Enforcing subscription user_id={user_id} "
@@ -128,6 +139,16 @@ def enforce_subscription(
     sub = (
         db.query(UserSubscription)
         .join(SubscriptionPlan)
+        .options(
+            contains_eager(UserSubscription.plan).load_only(
+                SubscriptionPlan.id,
+                SubscriptionPlan.name,
+                SubscriptionPlan.country_code,
+                SubscriptionPlan.price,
+                SubscriptionPlan.max_reports,
+                SubscriptionPlan.is_active,
+            )
+        )
         .filter(
             UserSubscription.id == subscription_id,
             UserSubscription.user_id == user_id,
@@ -141,7 +162,7 @@ def enforce_subscription(
     if sub.is_expired:
         raise HTTPException(
             403,
-            "Subscription has expired. Please buy one to proceed further!"
+            "Subscription has expired. Please buy one to proceed further!",
         )
 
     if not sub.is_active:
@@ -150,6 +171,9 @@ def enforce_subscription(
     start_date = to_utc_aware(sub.start_date)
     end_date = to_utc_aware(sub.end_date)
     now = datetime.now(timezone.utc)
+
+    if start_date is None or end_date is None:
+        raise HTTPException(403, "Subscription is missing validity dates")
 
     if start_date > now or end_date < now:
         logger.warning(
@@ -166,10 +190,16 @@ def enforce_subscription(
     return sub
 
 
-def increment_usage(db: Session, subscription: UserSubscription):
+def increment_usage(
+    db: Session,
+    subscription: UserSubscription,
+    *,
+    commit: bool = True,
+):
     try:
-        subscription.reports_used += 1
-        db.commit()
+        subscription.reports_used = (subscription.reports_used or 0) + 1
+        if commit:
+            db.commit()
         logger.info(
             f"Subscription usage incremented "
             f"subscription_id={subscription.id} "
@@ -180,30 +210,30 @@ def increment_usage(db: Session, subscription: UserSubscription):
         logger.exception("Failed to increment subscription usage")
         raise
 
-    
+
 def expire_subscriptions(db: Session) -> int:
     """
     Deactivate expired subscriptions.
     Returns number of expired subscriptions.
     """
     try:
-        print("working........")
-
         now = datetime.now(timezone.utc)
 
-        subs = (
+        count = (
             db.query(UserSubscription)
             .filter(
-                UserSubscription.is_expired == False,
+                UserSubscription.is_expired.is_(False),
+                UserSubscription.end_date.isnot(None),
                 UserSubscription.end_date < now,
             )
-            .all()
+            .update(
+                {
+                    UserSubscription.is_expired: True,
+                    UserSubscription.is_active: False,
+                },
+                synchronize_session=False,
+            )
         )
-
-        count = 0
-        for sub in subs:
-            sub.is_expired = True
-            count += 1
 
         if count:
             db.commit()
@@ -211,7 +241,7 @@ def expire_subscriptions(db: Session) -> int:
         else:
             logger.info("No subscriptions to expire")
         return count
-    
+
     except Exception:
         db.rollback()
         logger.exception("Expire subscription job failed")
@@ -221,20 +251,35 @@ def expire_subscriptions(db: Session) -> int:
 def send_expiry_reminders(db: Session):
     today = datetime.now(timezone.utc).date()
     sent = 0
+    reminder_window_start = datetime.combine(
+        today + timedelta(days=1),
+        time.min,
+        tzinfo=timezone.utc,
+    )
+    reminder_window_end = datetime.combine(
+        today + timedelta(days=4),
+        time.min,
+        tzinfo=timezone.utc,
+    )
 
     logger.info(f"[EXPIRY REMINDER] Job started | today={today}")
 
     subscriptions = (
         db.query(UserSubscription)
+        .options(
+            selectinload(UserSubscription.user),
+            selectinload(UserSubscription.plan),
+        )
         .filter(
-            UserSubscription.end_date.isnot(None),
-            UserSubscription.is_active == True,
-            UserSubscription.is_expired == False,
+            UserSubscription.end_date >= reminder_window_start,
+            UserSubscription.end_date < reminder_window_end,
+            UserSubscription.is_active.is_(True),
+            UserSubscription.is_expired.is_(False),
         )
         .all()
     )
 
-    logger.info(f"[EXPIRY REMINDER] Active subscriptions found={len(subscriptions)}")
+    logger.info(f"[EXPIRY REMINDER] Candidate subscriptions found={len(subscriptions)}")
 
     for sub in subscriptions:
         if not sub.end_date:
@@ -243,7 +288,13 @@ def send_expiry_reminders(db: Session):
             )
             continue
 
-        days_left = (sub.end_date.date() - today).days
+        if not sub.plan:
+            logger.warning(
+                f"[EXPIRY REMINDER] Subscription id={sub.id} has no plan relation"
+            )
+            continue
+
+        days_left = (to_utc_aware(sub.end_date).date() - today).days
 
         logger.info(
             f"[EXPIRY REMINDER] sub_id={sub.id} "
@@ -252,44 +303,38 @@ def send_expiry_reminders(db: Session):
             f"days_left={days_left}"
         )
 
-        if days_left in (1, 2, 3):
-            user = sub.user
+        user = sub.user
 
-            if not user:
-                logger.warning(
-                    f"[EXPIRY REMINDER] sub_id={sub.id} has no user relation"
-                )
-                continue
-
-            if not user.email:
-                logger.warning(
-                    f"[EXPIRY REMINDER] user_id={user.id} has no email"
-                )
-                continue
-
-            logger.info(
-                f"[EXPIRY REMINDER] Sending email | "
-                f"user_id={user.id} email={user.email} "
-                f"plan={sub.plan.name} expires_in={days_left} days"
+        if not user:
+            logger.warning(
+                f"[EXPIRY REMINDER] sub_id={sub.id} has no user relation"
             )
+            continue
 
-            try:
-                send_subscription_expiry_email(
-                    to_email=user.email,
-                    plan_name=sub.plan.name,
-                    expiry_date=sub.end_date,
-                )
-                sent += 1
+        if not user.email:
+            logger.warning(
+                f"[EXPIRY REMINDER] user_id={user.id} has no email"
+            )
+            continue
 
-            except Exception:
-                logger.exception(
-                    f"[EXPIRY REMINDER] FAILED sending email | "
-                    f"user_id={user.id} sub_id={sub.id}"
-                )
+        logger.info(
+            f"[EXPIRY REMINDER] Sending email | "
+            f"user_id={user.id} email={user.email} "
+            f"plan={sub.plan.name} expires_in={days_left} days"
+        )
 
-        else:
-            logger.debug(
-                f"[EXPIRY REMINDER] Skipped | sub_id={sub.id} days_left={days_left}"
+        try:
+            send_subscription_expiry_email(
+                to_email=user.email,
+                plan_name=sub.plan.name,
+                expiry_date=sub.end_date,
+            )
+            sent += 1
+
+        except Exception:
+            logger.exception(
+                f"[EXPIRY REMINDER] FAILED sending email | "
+                f"user_id={user.id} sub_id={sub.id}"
             )
 
     logger.info(
@@ -312,9 +357,8 @@ REQUIRED_COLUMNS = {
 def add_subscription_plans_from_excel(
     *,
     db: Session,
-    file
+    file,
 ) -> List[str]:
-
     try:
         file_bytes = file.read()
         excel_buffer = BytesIO(file_bytes)
@@ -324,21 +368,32 @@ def add_subscription_plans_from_excel(
         if not REQUIRED_COLUMNS.issubset(set(df.columns)):
             raise HTTPException(
                 400,
-                f"Excel must contain columns: {REQUIRED_COLUMNS}"
+                f"Excel must contain columns: {REQUIRED_COLUMNS}",
             )
 
         created_plans = []
         global_reference_pro_price = None
+        excel_global_plan = None
+        country_codes = {
+            str(code).upper()
+            for code in df["country_code"].dropna().unique().tolist()
+        }
+        country_codes.add(GLOBAL_COUNTRY_CODE)
+
+        existing_plans = {
+            (plan.country_code.upper(), plan.name.upper()): plan
+            for plan in db.query(SubscriptionPlan)
+            .filter(SubscriptionPlan.country_code.in_(country_codes))
+            .all()
+        }
 
         grouped = df.groupby("country_code")
 
         for country_code, group in grouped:
+            country_code = str(country_code).upper()
 
-            country_code = country_code.upper()
-            
             if country_code == GLOBAL_COUNTRY_CODE:
                 row = group.iloc[0]
-
                 excel_global_plan = {
                     "price": int(row["price"]),
                     "currency": row["currency"].upper(),
@@ -352,15 +407,12 @@ def add_subscription_plans_from_excel(
             if pro_row.empty and basic_row.empty:
                 raise HTTPException(
                     400,
-                    f"Either PRO or BASIC must be provided for {country_code}"
+                    f"Either PRO or BASIC must be provided for {country_code}",
                 )
 
             sample_row = group.iloc[0]
             currency = sample_row["currency"].upper()
 
-            # -------------------------
-            # PRO calculation
-            # -------------------------
             if not pro_row.empty:
                 pro_price = int(pro_row.iloc[0]["price"])
                 pro_reports = int(pro_row.iloc[0]["max_reports"])
@@ -375,146 +427,91 @@ def add_subscription_plans_from_excel(
             else:
                 basic_price = int(round(pro_price * 0.6))
                 basic_reports = pro_reports
-                
+
             master_reports = 10
             master_price = int(round(pro_price * master_reports * 0.8))
-            
+
             if global_reference_pro_price is None:
                 global_reference_pro_price = pro_price
 
-            existing_pro = db.query(SubscriptionPlan).filter(
-                SubscriptionPlan.name == "PRO",
-                SubscriptionPlan.country_code == country_code,
-            ).first()
-            
-            existing_master = db.query(SubscriptionPlan).filter(
-                SubscriptionPlan.name == "MASTER",
-                SubscriptionPlan.country_code == country_code,
-            ).first()
+            existing_pro = existing_plans.get((country_code, "PRO"))
+            existing_master = existing_plans.get((country_code, "MASTER"))
+            existing_basic = existing_plans.get((country_code, "BASIC"))
 
             if not existing_master:
-                db.add(
-                    SubscriptionPlan(
-                        name="MASTER",
-                        country_code=country_code,
-                        price=master_price,
-                        currency=currency,
-                        max_reports=master_reports,
-                        is_active=True,
-                    )
+                master_plan = SubscriptionPlan(
+                    name="MASTER",
+                    country_code=country_code,
+                    price=master_price,
+                    currency=currency,
+                    max_reports=master_reports,
+                    is_active=True,
                 )
+                db.add(master_plan)
+                existing_plans[(country_code, "MASTER")] = master_plan
                 created_plans.append(f"MASTER-{country_code}")
 
             if not existing_pro:
-                db.add(
-                    SubscriptionPlan(
-                        name="PRO",
-                        country_code=country_code,
-                        price=pro_price,
-                        currency=currency,
-                        max_reports=pro_reports,
-                        is_active=True,
-                    )
+                pro_plan = SubscriptionPlan(
+                    name="PRO",
+                    country_code=country_code,
+                    price=pro_price,
+                    currency=currency,
+                    max_reports=pro_reports,
+                    is_active=True,
                 )
+                db.add(pro_plan)
+                existing_plans[(country_code, "PRO")] = pro_plan
                 created_plans.append(f"PRO-{country_code}")
 
-            existing_basic = db.query(SubscriptionPlan).filter(
-                SubscriptionPlan.name == "BASIC",
-                SubscriptionPlan.country_code == country_code,
-            ).first()
-
             if not existing_basic:
-                db.add(
-                    SubscriptionPlan(
-                        name="BASIC",
-                        country_code=country_code,
-                        price=basic_price,
-                        currency=currency,
-                        max_reports=basic_reports,
-                        is_active=True,
-                    )
+                basic_plan = SubscriptionPlan(
+                    name="BASIC",
+                    country_code=country_code,
+                    price=basic_price,
+                    currency=currency,
+                    max_reports=basic_reports,
+                    is_active=True,
                 )
+                db.add(basic_plan)
+                existing_plans[(country_code, "BASIC")] = basic_plan
                 created_plans.append(f"BASIC-{country_code}")
-                
-        # existing_global = db.query(SubscriptionPlan).filter(
-        #     SubscriptionPlan.country_code == GLOBAL_COUNTRY_CODE
-        # ).all()
 
-        # for plan in existing_global:
-        #     db.delete(plan)
-            
-        # db.flush()
+        existing_global = existing_plans.get((GLOBAL_COUNTRY_CODE, "GLOBAL"))
 
-        # existing_globals = db.query(SubscriptionPlan).filter(
-        #     SubscriptionPlan.country_code == GLOBAL_COUNTRY_CODE
-        # ).all()
-
-        # for plan in existing_globals:
-        #     db.delete(plan)
-
-        # db.flush()
-
-        # ✅ PRIORITY 1: Use Excel GLOBAL
-        existing_global = db.query(SubscriptionPlan).filter(
-            SubscriptionPlan.country_code == GLOBAL_COUNTRY_CODE
-        ).first()
-
-        # ✅ PRIORITY 1: Use Excel GLOBAL
         if excel_global_plan:
             if existing_global:
                 logger.info("[GLOBAL] Updating existing GLOBAL plan")
-
                 existing_global.price = excel_global_plan["price"]
                 existing_global.currency = excel_global_plan["currency"]
                 existing_global.max_reports = excel_global_plan["max_reports"]
                 existing_global.is_active = True
-
             else:
                 logger.info("[GLOBAL] Creating new GLOBAL plan")
-
-                db.add(
-                    SubscriptionPlan(
-                        name="GLOBAL",
-                        country_code=GLOBAL_COUNTRY_CODE,
-                        price=excel_global_plan["price"],
-                        currency=excel_global_plan["currency"],
-                        max_reports=excel_global_plan["max_reports"],
-                        is_active=True,
-                    )
+                global_plan = SubscriptionPlan(
+                    name="GLOBAL",
+                    country_code=GLOBAL_COUNTRY_CODE,
+                    price=excel_global_plan["price"],
+                    currency=excel_global_plan["currency"],
+                    max_reports=excel_global_plan["max_reports"],
+                    is_active=True,
                 )
+                db.add(global_plan)
+                existing_plans[(GLOBAL_COUNTRY_CODE, "GLOBAL")] = global_plan
                 created_plans.append("GLOBAL")
-
-        # ✅ PRIORITY 2: fallback to auto-calc
         elif not existing_global and global_reference_pro_price is not None:
             global_reports = 10
             global_price = int(round(global_reference_pro_price * global_reports * 0.8))
-
-            db.add(
-                SubscriptionPlan(
-                    name="GLOBAL",
-                    country_code=GLOBAL_COUNTRY_CODE,
-                    price=global_price,
-                    currency="USD",
-                    max_reports=global_reports,
-                    is_active=True,
-                )
+            global_plan = SubscriptionPlan(
+                name="GLOBAL",
+                country_code=GLOBAL_COUNTRY_CODE,
+                price=global_price,
+                currency="USD",
+                max_reports=global_reports,
+                is_active=True,
             )
-            created_plans.append("GLOBAL")
-
-        if not existing_global and global_reference_pro_price is not None:
-            global_reports = 10
-            global_price = int(round(global_reference_pro_price * global_reports * 0.8))
-
-            db.add(
-                SubscriptionPlan(
-                    name="GLOBAL",
-                    country_code=GLOBAL_COUNTRY_CODE,
-                    price=global_price,
-                    currency="USD",
-                    max_reports=global_reports,
-                    is_active=True,
-                )
-            )
+            db.add(global_plan)
+            existing_plans[(GLOBAL_COUNTRY_CODE, "GLOBAL")] = global_plan
             created_plans.append("GLOBAL")
 
         db.commit()
@@ -528,11 +525,11 @@ def add_subscription_plans_from_excel(
         db.rollback()
         logger.exception("Excel import failed")
         raise HTTPException(500, "Excel processing failed")
-    
-    
+
+
 def get_usable_subscription(
     db: Session,
-    user_id: int,
+    user_id: UUID,
     country_code: str,
 ):
     logger.debug(
@@ -547,11 +544,12 @@ def get_usable_subscription(
 
     for sub in subs:
         plan = sub.plan
+        reports_used = sub.reports_used or 0
 
         if plan.max_reports is None:
             return sub
 
-        if sub.reports_used < plan.max_reports:
+        if reports_used < plan.max_reports:
             return sub
 
     return None
@@ -559,7 +557,7 @@ def get_usable_subscription(
 
 def get_usable_subscription_with_fallback(
     db: Session,
-    user_id: int,
+    user_id: UUID,
     country_code: str,
 ):
     local_sub = get_usable_subscription(

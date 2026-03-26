@@ -1,30 +1,217 @@
-#app/routes/admin/dashboard.py
+# app/routes/admin/dashboard.py
 
+import json
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timedelta, timezone
 
-from app.deps import get_db, require_superuser, require_management
-
+from app.core.redis_client import redis_client
+from app.deps import get_db, require_management
 from app.models import User
 from app.models.feedback import Feedback
 from app.models.subscription import SubscriptionPlan, UserSubscription
 from app.models.valuation import ValuationReport
-
-from app.utils.response import APIResponse, success_response
+from app.schemas import (
+    DashboardCountriesResponse,
+    DashboardFeedbackResponse,
+    DashboardOverviewResponse,
+    DashboardSubscriptionBreakdownItem,
+    DashboardUserRegistrationsResponse,
+    DashboardUsersResponse,
+    DashboardValuationsResponse,
+)
 from app.utils.logger_config import app_logger as logger
-
-datetime.now(timezone.utc)
+from app.utils.response import APIResponse, success_response
 
 
 router = APIRouter(
     prefix="/admin/dashboard",
-    tags=["admin-dashboard"]
+    tags=["admin-dashboard"],
 )
 
+DASHBOARD_CACHE_PREFIX = "admin-dashboard"
+DASHBOARD_CACHE_TTL_SECONDS = 60
 
-@router.get("/overview", response_model=APIResponse[dict])
+OVERVIEW_EXAMPLE = {
+    "success": True,
+    "message": "Dashboard overview fetched successfully",
+    "data": {
+        "users": {
+            "total": 184,
+            "active": 176,
+        },
+        "subscriptions": {
+            "total": 132,
+            "active": 128,
+        },
+        "valuations": {
+            "total": 945,
+        },
+    },
+}
+
+USERS_EXAMPLE = {
+    "success": True,
+    "message": "Users stats fetched successfully",
+    "data": {
+        "email_verified": 165,
+        "email_unverified": 19,
+        "inactive_users": 8,
+        "new_users_last_30_days": 24,
+    },
+}
+
+REGISTRATIONS_BY_YEAR_EXAMPLE = {
+    "success": True,
+    "message": "User registrations by year fetched successfully",
+    "data": {
+        "user_registrations_by_year": [
+            {"year": 2022, "registrations": 18},
+            {"year": 2023, "registrations": 31},
+            {"year": 2024, "registrations": 42},
+            {"year": 2025, "registrations": 57},
+            {"year": 2026, "registrations": 24},
+        ],
+    },
+}
+
+SUBSCRIPTIONS_EXAMPLE = {
+    "success": True,
+    "message": "Subscriptions breakdown fetched successfully",
+    "data": [
+        {
+            "country": "AE",
+            "plan": "PRO",
+            "currency": "AED",
+            "price": 999,
+            "subscriptions": {
+                "total": 21,
+                "active": 19,
+            },
+            "revenue": {
+                "total": 20979,
+                "active": 18981,
+            },
+        }
+    ],
+}
+
+VALUATIONS_EXAMPLE = {
+    "success": True,
+    "message": "Valuations stats fetched successfully",
+    "data": {
+        "by_category": [
+            {"category": "apartment", "count": 84},
+            {"category": "villa", "count": 39},
+            {"category": "warehouse", "count": 11},
+        ],
+        "last_30_days": 43,
+    },
+}
+
+COUNTRIES_EXAMPLE = {
+    "success": True,
+    "message": "Country-wise stats fetched successfully",
+    "data": {
+        "subscriptions": [
+            {"country": "AE", "count": 52},
+            {"country": "IN", "count": 37},
+        ],
+        "valuations": [
+            {"country": "AE", "count": 71},
+            {"country": "IN", "count": 58},
+        ],
+    },
+}
+
+FEEDBACK_EXAMPLE = {
+    "success": True,
+    "message": "Feedback stats fetched successfully",
+    "data": {
+        "total_feedback": 94,
+        "open_feedback": 7,
+        "avg_rating": 4.37,
+    },
+}
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _dashboard_cache_key(name: str) -> str:
+    return f"{DASHBOARD_CACHE_PREFIX}:{name}"
+
+
+def _read_dashboard_cache(name: str) -> Any | None:
+    try:
+        cached_payload = redis_client.get(_dashboard_cache_key(name))
+    except Exception:
+        logger.warning("Dashboard cache read failed key=%s", name, exc_info=True)
+        return None
+
+    if not cached_payload:
+        return None
+
+    try:
+        return json.loads(cached_payload)
+    except json.JSONDecodeError:
+        logger.warning("Dashboard cache payload invalid key=%s", name)
+        return None
+
+
+def _write_dashboard_cache(name: str, payload: Any) -> None:
+    try:
+        redis_client.setex(
+            _dashboard_cache_key(name),
+            DASHBOARD_CACHE_TTL_SECONDS,
+            json.dumps(payload),
+        )
+    except Exception:
+        logger.warning("Dashboard cache write failed key=%s", name, exc_info=True)
+
+
+def _cached_dashboard_response(
+    *,
+    cache_name: str,
+    success_message: str,
+    builder: Callable[[], Any],
+):
+    cached_payload = _read_dashboard_cache(cache_name)
+    if cached_payload is not None:
+        logger.debug("Admin dashboard cache hit key=%s", cache_name)
+        return success_response(
+            data=cached_payload,
+            message=success_message,
+        )
+
+    payload = builder()
+    _write_dashboard_cache(cache_name, payload)
+    return success_response(
+        data=payload,
+        message=success_message,
+    )
+
+
+@router.get(
+    "/overview",
+    response_model=APIResponse[DashboardOverviewResponse],
+    summary="Get dashboard overview",
+    description="Returns headline totals for users, subscriptions, and valuations.",
+    responses={
+        200: {
+            "description": "Dashboard overview metrics.",
+            "content": {
+                "application/json": {
+                    "example": OVERVIEW_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def dashboard_overview(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
@@ -32,43 +219,69 @@ def dashboard_overview(
     try:
         logger.info("Admin dashboard: overview requested")
 
-        total_users = db.query(func.count(User.id)).scalar()
-        active_users = db.query(func.count(User.id)).filter(
-            User.is_active == True
-        ).scalar()
+        def build_payload() -> dict:
+            user_totals = (
+                db.query(
+                    func.count(User.id).label("total"),
+                    func.count(User.id).filter(User.is_active.is_(True)).label("active"),
+                )
+                .one()
+            )
 
-        total_subscriptions = db.query(func.count(UserSubscription.id)).scalar()
-        active_subscriptions = db.query(func.count(UserSubscription.id)).filter(
-            UserSubscription.is_active == True
-        ).scalar()
+            subscription_totals = (
+                db.query(
+                    func.count(UserSubscription.id).label("total"),
+                    func.count(UserSubscription.id)
+                    .filter(UserSubscription.is_active.is_(True))
+                    .label("active"),
+                )
+                .one()
+            )
 
-        total_valuations = db.query(func.count(ValuationReport.id)).scalar()
+            total_valuations = db.query(func.count(ValuationReport.id)).scalar() or 0
 
-        logger.debug("Admin dashboard: overview aggregation completed")
+            logger.debug("Admin dashboard: overview aggregation completed")
 
-        return success_response(
-            data={
+            return {
                 "users": {
-                    "total": total_users,
-                    "active": active_users,
+                    "total": user_totals.total,
+                    "active": user_totals.active,
                 },
                 "subscriptions": {
-                    "total": total_subscriptions,
-                    "active": active_subscriptions,
+                    "total": subscription_totals.total,
+                    "active": subscription_totals.active,
                 },
                 "valuations": {
-                    "total": total_valuations
-                }
-            },
-            message="Dashboard overview fetched successfully"
-        )
+                    "total": total_valuations,
+                },
+            }
 
+        return _cached_dashboard_response(
+            cache_name="overview",
+            success_message="Dashboard overview fetched successfully",
+            builder=build_payload,
+        )
     except Exception:
         logger.exception("Dashboard overview failed")
         raise HTTPException(500, "Failed to load dashboard overview")
 
 
-@router.get("/users", response_model=APIResponse[dict])
+@router.get(
+    "/users",
+    response_model=APIResponse[DashboardUsersResponse],
+    summary="Get user dashboard stats",
+    description="Returns email verification and recent-user metrics for the admin dashboard.",
+    responses={
+        200: {
+            "description": "User metrics for the dashboard.",
+            "content": {
+                "application/json": {
+                    "example": USERS_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def dashboard_users(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
@@ -76,84 +289,134 @@ def dashboard_users(
     try:
         logger.info("Admin dashboard: users stats requested")
 
-        verified = db.query(func.count(User.id)).filter(
-            User.is_email_verified == True
-        ).scalar()
+        def build_payload() -> dict:
+            last_30_days = _utc_now() - timedelta(days=30)
+            stats = (
+                db.query(
+                    func.count(User.id)
+                    .filter(User.is_email_verified.is_(True))
+                    .label("verified"),
+                    func.count(User.id)
+                    .filter(User.is_email_verified.is_(False))
+                    .label("unverified"),
+                    func.count(User.id)
+                    .filter(User.is_active.is_(False))
+                    .label("inactive"),
+                    func.count(User.id)
+                    .filter(User.email_verified_at >= last_30_days)
+                    .label("new_users_30d"),
+                )
+                .one()
+            )
 
-        unverified = db.query(func.count(User.id)).filter(
-            User.is_email_verified == False
-        ).scalar()
+            logger.debug("Admin dashboard: users stats aggregation completed")
 
-        inactive = db.query(func.count(User.id)).filter(
-            User.is_active == False
-        ).scalar()
+            return {
+                "email_verified": stats.verified,
+                "email_unverified": stats.unverified,
+                "inactive_users": stats.inactive,
+                "new_users_last_30_days": stats.new_users_30d,
+            }
 
-        last_30_days = datetime.now(timezone.utc) - timedelta(days=30)
-        new_users_30d = db.query(func.count(User.id)).filter(
-            User.email_verified_at >= last_30_days
-        ).scalar()
-
-        logger.debug("Admin dashboard: users stats aggregation completed")
-
-        return success_response(
-            data={
-                "email_verified": verified,
-                "email_unverified": unverified,
-                "inactive_users": inactive,
-                "new_users_last_30_days": new_users_30d,
-            },
-            message="Users stats fetched successfully"
+        return _cached_dashboard_response(
+            cache_name="users",
+            success_message="Users stats fetched successfully",
+            builder=build_payload,
         )
     except Exception:
         logger.exception("Dashboard users stats failed")
         raise HTTPException(500, "Failed to load users stats")
 
 
-@router.get("/user-registrations-by-year", response_model=APIResponse[dict])
+@router.get(
+    "/user-registrations-by-year",
+    response_model=APIResponse[DashboardUserRegistrationsResponse],
+    summary="Get yearly verified registrations",
+    description="Returns verified user registrations grouped by year for the last five calendar years.",
+    responses={
+        200: {
+            "description": "Five-year registration trend.",
+            "content": {
+                "application/json": {
+                    "example": REGISTRATIONS_BY_YEAR_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def user_registrations_by_last_five_years(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
     try:
-        # Get the current year (e.g., 2026)
-        current_year = datetime.now().year
+        def build_payload() -> dict:
+            current_year = _utc_now().year
+            window_start = datetime(current_year - 4, 1, 1, tzinfo=timezone.utc)
+            window_end = datetime(current_year + 1, 1, 1, tzinfo=timezone.utc)
+            registration_year = func.extract("year", User.email_verified_at)
 
-        # Query user registrations by year
-        results = (
-            db.query(func.extract('year', User.email_verified_at).label('year'), func.count(User.id).label('total'))
-            .filter(func.extract('year', User.email_verified_at).in_([current_year-4, current_year-3, current_year-2, current_year-1, current_year]))
-            .group_by(func.extract('year', User.email_verified_at))
-            .order_by('year')
-            .all()
+            results = (
+                db.query(
+                    registration_year.label("year"),
+                    func.count(User.id).label("total"),
+                )
+                .filter(
+                    User.email_verified_at.isnot(None),
+                    User.email_verified_at >= window_start,
+                    User.email_verified_at < window_end,
+                )
+                .group_by(registration_year)
+                .order_by(registration_year)
+                .all()
+            )
+
+            year_data = {
+                year: 0 for year in range(current_year - 4, current_year + 1)
+            }
+
+            for year, total in results:
+                if year is not None:
+                    year_data[int(year)] = total
+
+            user_data_by_year = [
+                {"year": year, "registrations": year_data[year]}
+                for year in range(current_year - 4, current_year + 1)
+            ]
+
+            logger.debug(
+                "Admin dashboard: user registrations by year aggregation completed"
+            )
+
+            return {"user_registrations_by_year": user_data_by_year}
+
+        return _cached_dashboard_response(
+            cache_name="user-registrations-by-year",
+            success_message="User registrations by year fetched successfully",
+            builder=build_payload,
         )
-
-        # Create a dictionary for years 2022–2026 (or current year - 4 to current year)
-        year_data = {year: 0 for year in range(current_year - 4, current_year + 1)}
-
-        # Populate the dictionary with actual data from the query
-        for year, total in results:
-            if year is not None:
-                year_data[int(year)] = total
-
-        # Format the data to return to frontend
-        user_data_by_year = [
-            {"year": year, "registrations": year_data[year]}
-            for year in range(current_year - 4, current_year + 1)
-        ]
-
-        logger.debug("Admin dashboard: user registrations by year aggregation completed")
-
-        return success_response(
-            data={"user_registrations_by_year": user_data_by_year},
-            message="User registrations by year fetched successfully"
-        )
-
     except Exception:
         logger.exception("Failed to load user registrations by year")
         raise HTTPException(500, "Failed to load user registrations by year")
-    
 
-@router.get("/subscriptions", response_model=APIResponse[list])
+
+@router.get(
+    "/subscriptions",
+    response_model=APIResponse[list[DashboardSubscriptionBreakdownItem]],
+    summary="Get subscription breakdown",
+    description=(
+        "Returns subscription totals and derived revenue grouped by plan and plan country."
+    ),
+    responses={
+        200: {
+            "description": "Subscription and revenue breakdown.",
+            "content": {
+                "application/json": {
+                    "example": SUBSCRIPTIONS_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def dashboard_subscriptions_country_wise(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
@@ -161,59 +424,78 @@ def dashboard_subscriptions_country_wise(
     try:
         logger.info("Admin dashboard: subscriptions breakdown requested")
 
-        rows = (
-            db.query(
-                SubscriptionPlan.country_code,
-                SubscriptionPlan.name,
-                SubscriptionPlan.currency,
-                SubscriptionPlan.price,
-                func.count(UserSubscription.id).label("total"),
-                func.count(
-                    func.nullif(UserSubscription.is_active == False, True)
-                ).label("active"),
+        def build_payload() -> list[dict]:
+            rows = (
+                db.query(
+                    SubscriptionPlan.country_code,
+                    SubscriptionPlan.name,
+                    SubscriptionPlan.currency,
+                    SubscriptionPlan.price,
+                    func.count(UserSubscription.id).label("total"),
+                    func.count(UserSubscription.id)
+                    .filter(UserSubscription.is_active.is_(True))
+                    .label("active"),
+                )
+                .outerjoin(UserSubscription, SubscriptionPlan.id == UserSubscription.plan_id)
+                .group_by(
+                    SubscriptionPlan.country_code,
+                    SubscriptionPlan.name,
+                    SubscriptionPlan.currency,
+                    SubscriptionPlan.price,
+                )
+                .order_by(
+                    SubscriptionPlan.country_code,
+                    SubscriptionPlan.name,
+                )
+                .all()
             )
-            .outerjoin(UserSubscription, SubscriptionPlan.id == UserSubscription.plan_id)
-            .group_by(
-                SubscriptionPlan.country_code,
-                SubscriptionPlan.name,
-                SubscriptionPlan.currency,
-                SubscriptionPlan.price,
-            )
-            .order_by(
-                SubscriptionPlan.country_code,
-                SubscriptionPlan.name,
-            )
-            .all()
-        )
 
-        logger.debug("Admin dashboard: subscription aggregation completed")
+            logger.debug("Admin dashboard: subscription aggregation completed")
 
-        return success_response(
-            data=[
+            return [
                 {
-                    "country": r.country_code,
-                    "plan": r.name,
-                    "currency": r.currency,
-                    "price": r.price,
+                    "country": row.country_code,
+                    "plan": row.name,
+                    "currency": row.currency,
+                    "price": row.price,
                     "subscriptions": {
-                    "total": r.total,
-                    "active": r.active,
-                },
-                "revenue": {
-                    "total": r.total * r.price,
-                    "active": r.active * r.price,
-                },
-            }
-            for r in rows
-        ],
-            message="Subscriptions breakdown fetched successfully"
+                        "total": row.total,
+                        "active": row.active,
+                    },
+                    "revenue": {
+                        "total": row.total * row.price,
+                        "active": row.active * row.price,
+                    },
+                }
+                for row in rows
+            ]
+
+        return _cached_dashboard_response(
+            cache_name="subscriptions",
+            success_message="Subscriptions breakdown fetched successfully",
+            builder=build_payload,
         )
     except Exception:
         logger.exception("Dashboard subscriptions breakdown failed")
         raise HTTPException(500, "Failed to load subscriptions breakdown")
 
 
-@router.get("/valuations", response_model=APIResponse[dict])
+@router.get(
+    "/valuations",
+    response_model=APIResponse[DashboardValuationsResponse],
+    summary="Get valuation dashboard stats",
+    description="Returns valuations grouped by category and a rolling 30-day total.",
+    responses={
+        200: {
+            "description": "Valuation counts by category and recent activity.",
+            "content": {
+                "application/json": {
+                    "example": VALUATIONS_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def dashboard_valuations(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
@@ -221,38 +503,63 @@ def dashboard_valuations(
     try:
         logger.info("Admin dashboard: valuation stats requested")
 
-        by_category = (
-            db.query(
-                ValuationReport.category,
-                func.count(ValuationReport.id)
+        def build_payload() -> dict:
+            by_category = (
+                db.query(
+                    ValuationReport.category,
+                    func.count(ValuationReport.id),
+                )
+                .group_by(ValuationReport.category)
+                .order_by(ValuationReport.category)
+                .all()
             )
-            .group_by(ValuationReport.category)
-            .all()
-        )
 
-        last_30_days = datetime.now(timezone.utc) - timedelta(days=30)
-        last_30d_count = db.query(func.count(ValuationReport.id)).filter(
-            ValuationReport.created_at >= last_30_days
-        ).scalar()
+            last_30_days = _utc_now() - timedelta(days=30)
+            last_30d_count = (
+                db.query(func.count(ValuationReport.id))
+                .filter(ValuationReport.created_at >= last_30_days)
+                .scalar()
+                or 0
+            )
 
-        logger.debug("Admin dashboard: valuation aggregation completed")
+            logger.debug("Admin dashboard: valuation aggregation completed")
 
-        return success_response(
-            data={
+            return {
                 "by_category": [
-                    {"category": cat, "count": count}
-                    for cat, count in by_category
+                    {"category": category, "count": count}
+                    for category, count in by_category
                 ],
                 "last_30_days": last_30d_count,
-            },
-            message="Valuations stats fetched successfully"
+            }
+
+        return _cached_dashboard_response(
+            cache_name="valuations",
+            success_message="Valuations stats fetched successfully",
+            builder=build_payload,
         )
     except Exception:
         logger.exception("Dashboard valuations stats failed")
         raise HTTPException(500, "Failed to load valuations stats")
-    
 
-@router.get("/countries", response_model=APIResponse[dict])
+
+@router.get(
+    "/countries",
+    response_model=APIResponse[DashboardCountriesResponse],
+    summary="Get country-wise dashboard stats",
+    description=(
+        "Returns country-level counts for subscriptions and valuations shown on the admin dashboard."
+    ),
+    responses={
+        200: {
+            "description": "Country-wise subscription and valuation counts.",
+            "content": {
+                "application/json": {
+                    "example": COUNTRIES_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def dashboard_countries(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
@@ -260,69 +567,100 @@ def dashboard_countries(
     try:
         logger.info("Admin dashboard: country-wise stats requested")
 
-        subs_by_country = (
-            db.query(
-                UserSubscription.pricing_country_code,
-                func.count(UserSubscription.id)
+        def build_payload() -> dict:
+            subs_by_country = (
+                db.query(
+                    UserSubscription.pricing_country_code,
+                    func.count(UserSubscription.id),
+                )
+                .group_by(UserSubscription.pricing_country_code)
+                .order_by(UserSubscription.pricing_country_code)
+                .all()
             )
-            .group_by(UserSubscription.pricing_country_code)
-            .all()
-        )
 
-        valuations_by_country = (
-            db.query(
-                ValuationReport.country_code,
-                func.count(ValuationReport.id)
+            valuations_by_country = (
+                db.query(
+                    ValuationReport.country_code,
+                    func.count(ValuationReport.id),
+                )
+                .group_by(ValuationReport.country_code)
+                .order_by(ValuationReport.country_code)
+                .all()
             )
-            .group_by(ValuationReport.country_code)
-            .all()
-        )
 
-        logger.debug("Admin dashboard: country-wise aggregation completed")
+            logger.debug("Admin dashboard: country-wise aggregation completed")
 
-        return success_response(
-            data={
+            return {
                 "subscriptions": [
-                    {"country": c, "count": count}
-                    for c, count in subs_by_country
+                    {"country": country, "count": count}
+                    for country, count in subs_by_country
                 ],
                 "valuations": [
-                {"country": c, "count": count}
-                for c, count in valuations_by_country
-            ],
-        },
-            message="Country-wise stats fetched successfully"
+                    {"country": country, "count": count}
+                    for country, count in valuations_by_country
+                ],
+            }
+
+        return _cached_dashboard_response(
+            cache_name="countries",
+            success_message="Country-wise stats fetched successfully",
+            builder=build_payload,
         )
     except Exception:
         logger.exception("Dashboard country-wise stats failed")
         raise HTTPException(500, "Failed to load country-wise stats")
-    
 
 
-@router.get("/feedback", response_model=APIResponse[dict])
+@router.get(
+    "/feedback",
+    response_model=APIResponse[DashboardFeedbackResponse],
+    summary="Get feedback dashboard stats",
+    description="Returns overall feedback volume, open feedback count, and average rating.",
+    responses={
+        200: {
+            "description": "Feedback metrics for the admin dashboard.",
+            "content": {
+                "application/json": {
+                    "example": FEEDBACK_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def feedback_stats(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
-    total = db.query(func.count(Feedback.id)).scalar()
+    try:
+        def build_payload() -> dict:
+            stats = (
+                db.query(
+                    func.count(Feedback.id).label("total"),
+                    func.count(Feedback.id)
+                    .filter(Feedback.status == "OPEN")
+                    .label("open_count"),
+                    func.avg(Feedback.rating)
+                    .filter(Feedback.rating.isnot(None))
+                    .label("avg_rating"),
+                )
+                .one()
+            )
 
-    open_count = (
-        db.query(func.count(Feedback.id))
-        .filter(Feedback.status == "OPEN")
-        .scalar()
-    )
+            return {
+                "total_feedback": stats.total,
+                "open_feedback": stats.open_count,
+                "avg_rating": (
+                    round(float(stats.avg_rating), 2)
+                    if stats.avg_rating is not None
+                    else None
+                ),
+            }
 
-    avg_rating = (
-        db.query(func.avg(Feedback.rating))
-        .filter(Feedback.rating.isnot(None))
-        .scalar()
-    )
-
-    return success_response(
-        data={
-            "total_feedback": total,
-            "open_feedback": open_count,
-            "avg_rating": round(float(avg_rating), 2) if avg_rating is not None else None,
-        },
-        message="Feedback stats fetched successfully"
-    )
+        return _cached_dashboard_response(
+            cache_name="feedback",
+            success_message="Feedback stats fetched successfully",
+            builder=build_payload,
+        )
+    except Exception:
+        logger.exception("Dashboard feedback stats failed")
+        raise HTTPException(500, "Failed to load feedback stats")

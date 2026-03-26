@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
 
 from sqlalchemy.dialects.postgresql import UUID
 from app.database.mixins import UUIDPrimaryKeyMixin
@@ -22,6 +22,7 @@ class SubscriptionPlan(UUIDPrimaryKeyMixin, Base):
             "max_reports",
             name="uq_subscription_plan_unique"
         ),
+        Index("ix_subscription_plans_country_active", "country_code", "is_active"),
     )
 
     name = Column(String, nullable=False)              
@@ -40,13 +41,33 @@ class SubscriptionPlan(UUIDPrimaryKeyMixin, Base):
 
 class UserSubscription(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "user_subscriptions"
+    __table_args__ = (
+        Index(
+            "ix_user_subscriptions_user_active_window",
+            "user_id",
+            "is_active",
+            "is_expired",
+            "start_date",
+            "end_date",
+        ),
+        Index("ix_user_subscriptions_pricing_country_code", "pricing_country_code"),
+        Index("ix_user_subscriptions_payment_status", "payment_status"),
+        Index("ix_user_subscriptions_start_date", "start_date"),
+        Index("ix_user_subscriptions_end_date", "end_date"),
+        Index(
+            "ix_user_subscriptions_active_expiry_window",
+            "is_active",
+            "is_expired",
+            "end_date",
+        ),
+    )
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("subscription_plans.id"), nullable=False, index=True)
     
     pricing_country_code = Column(String, nullable=False)  
-    ip_country_code = Column(String, nullable=True)
-    payment_country_code = Column(String, nullable=True)
+    ip_country_code = Column(String, nullable=True, index=True)
+    payment_country_code = Column(String, nullable=True, index=True)
     
     razorpay_order_id = Column(String, nullable=True)
     razorpay_payment_id = Column(String, nullable=True)
@@ -63,6 +84,6 @@ class UserSubscription(UUIDPrimaryKeyMixin, Base):
     auto_renew = Column(Boolean, default=False)
     cancelled_at = Column(DateTime, nullable=True)
 
-    user = relationship("User")
-    plan = relationship("SubscriptionPlan")
+    user = relationship("User", lazy="selectin")
+    plan = relationship("SubscriptionPlan", lazy="selectin")
     

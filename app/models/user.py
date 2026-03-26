@@ -27,7 +27,7 @@ class User(UUIDPrimaryKeyMixin, Base):
     country = relationship(
         "Country",
         back_populates="users",
-        lazy="joined"
+        lazy="selectin"
     )
     
     is_superuser = Column(Boolean, default=False)

@@ -68,7 +68,18 @@ def get_my_active_plans(
     now = datetime.now(timezone.utc)
     try:
         plans = (
-            db.query(UserSubscription, Country)
+            db.query(
+                UserSubscription.id,
+                UserSubscription.reports_used,
+                UserSubscription.start_date,
+                UserSubscription.end_date,
+                SubscriptionPlan.name.label("plan_name"),
+                SubscriptionPlan.country_code,
+                SubscriptionPlan.price,
+                SubscriptionPlan.currency,
+                SubscriptionPlan.max_reports,
+                Country.name.label("country_name"),
+            )
             .join(SubscriptionPlan)
             .outerjoin(Country, Country.country_code == SubscriptionPlan.country_code)
             .filter(
@@ -93,26 +104,26 @@ def get_my_active_plans(
 
     return [
         {
-            "subscription_id": s.id,
-            "plan_name": s.plan.name,
-            "country": s.plan.country_code,
+            "subscription_id": subscription.id,
+            "plan_name": subscription.plan_name,
+            "country": subscription.country_code,
             "country_name": (
                 "Global"
-                if s.plan.country_code == "GLOBAL"
-                else (c.name if c else None)
+                if subscription.country_code == "GLOBAL"
+                else subscription.country_name
             ),
-            "price": s.plan.price,
-            "currency": s.plan.currency,
-            "max_reports": s.plan.max_reports,
-            "reports_used": s.reports_used,
+            "price": subscription.price,
+            "currency": subscription.currency,
+            "max_reports": subscription.max_reports,
+            "reports_used": subscription.reports_used,
             "remaining": (
-                None if s.plan.max_reports is None
-                else s.plan.max_reports - s.reports_used
+                None if subscription.max_reports is None
+                else subscription.max_reports - subscription.reports_used
             ),
-            "start_date": s.start_date,
-            "end_date": s.end_date,
+            "start_date": subscription.start_date,
+            "end_date": subscription.end_date,
         }
-        for s, c in plans
+        for subscription in plans
     ]
     
     
@@ -136,7 +147,18 @@ def subscription_history(
     )
 
     query = (
-        db.query(UserSubscription)
+        db.query(
+            UserSubscription.id,
+            UserSubscription.reports_used,
+            UserSubscription.start_date,
+            UserSubscription.end_date,
+            UserSubscription.is_active,
+            SubscriptionPlan.name.label("plan_name"),
+            SubscriptionPlan.country_code,
+            SubscriptionPlan.price,
+            SubscriptionPlan.currency,
+            SubscriptionPlan.max_reports,
+        )
         .join(SubscriptionPlan)
         .filter(UserSubscription.user_id == current_user.id)
     )
@@ -171,24 +193,24 @@ def subscription_history(
     now = datetime.now(timezone.utc)
 
     data = []
-    for s in subs:
-        end_date = s.end_date
+    for subscription in subs:
+        end_date = subscription.end_date
         if end_date and end_date.tzinfo is None:
             end_date = end_date.replace(tzinfo=timezone.utc)
 
         data.append({
-            "subscription_id": s.id,
-            "plan_name": s.plan.name,
-            "country": s.plan.country_code,
-            "price": s.plan.price,
-            "currency": s.plan.currency,
-            "max_reports": s.plan.max_reports,
-            "reports_used": s.reports_used,
-            "start_date": s.start_date,
-            "end_date": s.end_date,
-            "is_active": s.is_active,
+            "subscription_id": subscription.id,
+            "plan_name": subscription.plan_name,
+            "country": subscription.country_code,
+            "price": subscription.price,
+            "currency": subscription.currency,
+            "max_reports": subscription.max_reports,
+            "reports_used": subscription.reports_used,
+            "start_date": subscription.start_date,
+            "end_date": subscription.end_date,
+            "is_active": subscription.is_active,
             "expired": end_date < now if end_date else False,
-            "purchased_on": s.start_date,
+            "purchased_on": subscription.start_date,
         })
 
     return {

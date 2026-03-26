@@ -3,16 +3,16 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer_group
 from sqlalchemy import or_
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
-from app.deps import get_db, require_superuser, require_management
+from app.deps import get_db, require_management
 
 from app.models import User
 from app.models.valuation import ValuationReport
 
-from app.schemas import ValuationResponse, ValuationDetailResponse
+from app.schemas import EmptyObject, ValuationDetailResponse, ValuationResponse
 
 from app.common import PaginatedResponse
 from app.deps import pagination_params
@@ -29,21 +29,130 @@ router = APIRouter(
 )
 
 
-@router.get("/valuations", response_model=APIResponse[PaginatedResponse[ValuationResponse]])
+LIST_VALUATIONS_EXAMPLE = {
+    "success": True,
+    "message": "Valuations fetched successfully",
+    "data": {
+        "data": [
+            {
+                "id": "b1115df4-038f-4cea-9d39-a09d16138801",
+                "valuation_id": "DV-20260325-0001",
+                "user_id": "97d39a40-6cf6-4f8a-8a7e-0b33778c44bb",
+                "category": "apartment",
+                "country_code": "AE",
+                "subscription_id": "f42c8032-6e4e-4c8c-8d16-31fbe8d0678f",
+                "created_at": "2026-03-25T14:05:33.000000Z",
+            }
+        ],
+        "pagination": {
+            "page": 1,
+            "limit": 50,
+            "total": 1,
+        },
+    },
+}
+
+VALUATION_DETAIL_EXAMPLE = {
+    "success": True,
+    "message": "Valuation details fetched successfully",
+    "data": {
+        "id": "b1115df4-038f-4cea-9d39-a09d16138801",
+        "valuation_id": "DV-20260325-0001",
+        "user_id": "97d39a40-6cf6-4f8a-8a7e-0b33778c44bb",
+        "category": "apartment",
+        "country_code": "AE",
+        "subscription_id": "f42c8032-6e4e-4c8c-8d16-31fbe8d0678f",
+        "created_at": "2026-03-25T14:05:33.000000Z",
+        "user_fields": {
+            "country": "United Arab Emirates",
+            "full_address": "Yas Island, Abu Dhabi, UAE",
+            "property_type": "apartment",
+            "built_up_area": "1250 sqft",
+            "full_name": "John Doe",
+            "email": "john@example.com",
+        },
+        "ai_response": {
+            "property_details": {
+                "address": "Yas Island, Abu Dhabi, UAE",
+                "property_type": "apartment",
+            },
+            "final_value_opinion": {
+                "market_value": 1850000,
+                "currency": "AED",
+            },
+            "forecast": None,
+        },
+        "report_context": {
+            "currency_code": "AED",
+            "future_outlook": [],
+            "property_maps": {
+                "static_map_url": "https://maps.example/static-map",
+            },
+        },
+    },
+}
+
+DELETE_VALUATION_EXAMPLE = {
+    "success": True,
+    "message": "Valuation deleted successfully",
+    "data": {},
+}
+
+
+@router.get(
+    "/valuations",
+    response_model=APIResponse[PaginatedResponse[ValuationResponse]],
+    summary="List valuations",
+    description=(
+        "Returns valuation reports for admins and staff. Supports pagination, text search, "
+        "country/category filters, date range filters, and sorting by supported fields."
+    ),
+    responses={
+        200: {
+            "description": "Paginated valuation list.",
+            "content": {
+                "application/json": {
+                    "example": LIST_VALUATIONS_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def list_valuations(
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
     
     params: dict = Depends(pagination_params),
 
-    user_id: Optional[int] = Query(None),
-    country_code: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    user_id: Optional[UUID] = Query(
+        None,
+        description="Filter valuations by the owning user's UUID.",
+    ),
+    country_code: Optional[str] = Query(
+        None,
+        description="Filter by the detected property country code, for example `AE` or `IN`.",
+    ),
+    category: Optional[str] = Query(
+        None,
+        description="Filter by valuation category. This matches the stored property type.",
+    ),
+    from_date: Optional[datetime] = Query(
+        None,
+        description="Include valuations created at or after this UTC datetime.",
+    ),
+    to_date: Optional[datetime] = Query(
+        None,
+        description="Include valuations created at or before this UTC datetime.",
+    ),
     
-    sort_by: str = Query("created_at"),
-    order: str = Query("desc"),
+    sort_by: str = Query(
+        "created_at",
+        description="Sort field. Allowed values: `created_at`, `valuation_id`, `category`, `country_code`.",
+    ),
+    order: str = Query(
+        "desc",
+        description="Sort order. Allowed values: `asc` or `desc`.",
+    ),
 
 ):
     logger.info(
@@ -52,7 +161,15 @@ def list_valuations(
         f"search={params['search']} user_id={user_id}"
     )
     
-    query = db.query(ValuationReport)
+    query = db.query(
+        ValuationReport.id,
+        ValuationReport.valuation_id,
+        ValuationReport.user_id,
+        ValuationReport.category,
+        ValuationReport.country_code,
+        ValuationReport.subscription_id,
+        ValuationReport.created_at,
+    )
 
     if params["search"]:
         query = query.filter(
@@ -74,7 +191,7 @@ def list_valuations(
 
     if category:
         query = query.filter(
-            ValuationReport.category.ilike(category)
+            ValuationReport.category == category
         )
 
     query = filter_by_date_range(
@@ -84,7 +201,7 @@ def list_valuations(
             to_date,
         )
 
-    total = query.count()
+    total = query.order_by(None).count()
 
     ALLOWED_SORT_FIELDS = {
         "created_at": ValuationReport.created_at,
@@ -121,7 +238,18 @@ def list_valuations(
 
     return success_response(
         data={
-            "data": valuations,
+            "data": [
+                {
+                    "id": valuation.id,
+                    "valuation_id": valuation.valuation_id,
+                    "user_id": valuation.user_id,
+                    "category": valuation.category,
+                    "country_code": valuation.country_code,
+                    "subscription_id": valuation.subscription_id,
+                    "created_at": valuation.created_at,
+                }
+                for valuation in valuations
+            ],
             "pagination": {
                 "page": params["page"],
                 "limit": params["limit"],
@@ -132,16 +260,40 @@ def list_valuations(
     )
 
 
-@router.get("/valuations/{valuation_id}", response_model=APIResponse[ValuationDetailResponse])
+@router.get(
+    "/valuations/{valuation_id}",
+    response_model=APIResponse[ValuationDetailResponse],
+    summary="Get valuation details",
+    description=(
+        "Fetches the full valuation record, including the original input payload, "
+        "AI response, and report context, using the public `valuation_id`."
+    ),
+    responses={
+        200: {
+            "description": "Full valuation payload.",
+            "content": {
+                "application/json": {
+                    "example": VALUATION_DETAIL_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def get_valuation_details(
-    valuation_id: str,
+    valuation_id: str = Path(
+        ...,
+        description="Public valuation reference such as `DV-20260325-0001`.",
+    ),
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):
     logger.info(f"Admin fetching valuation valuation_id={valuation_id}")
-    valuation = db.query(ValuationReport).filter(
-        ValuationReport.valuation_id == valuation_id
-    ).first()
+    valuation = (
+        db.query(ValuationReport)
+        .options(undefer_group("valuation_payload"))
+        .filter(ValuationReport.valuation_id == valuation_id)
+        .first()
+    )
 
     if not valuation:
         logger.warning(f"Valuation not found valuation_id={valuation_id}")
@@ -153,9 +305,34 @@ def get_valuation_details(
     )
 
 
-@router.get("/users/{user_id}/valuations", response_model=APIResponse[PaginatedResponse[ValuationResponse]])
+@router.get(
+    "/users/{user_id}/valuations",
+    response_model=APIResponse[PaginatedResponse[ValuationResponse]],
+    summary="List valuations for a user",
+    description=(
+        "Returns valuation reports belonging to a single user. Supports the shared pagination "
+        "and search parameters, and sorts newest valuations first."
+    ),
+    responses={
+        200: {
+            "description": "Paginated valuation list for the user.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "User valuations fetched successfully",
+                        "data": LIST_VALUATIONS_EXAMPLE["data"],
+                    },
+                }
+            },
+        }
+    },
+)
 def get_user_valuations(
-    user_id: UUID,
+    user_id: UUID = Path(
+        ...,
+        description="UUID of the user whose valuations should be returned.",
+    ),
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
     params : dict = Depends(pagination_params),
@@ -166,13 +343,21 @@ def get_user_valuations(
         f"page={params['page']}"
     )
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.get(User, user_id)
     if not user:
         logger.warning(f"User not found while fetching valuations user_id={user_id}")
         raise HTTPException(404, "User not found")
 
     query = (
-        db.query(ValuationReport)
+        db.query(
+            ValuationReport.id,
+            ValuationReport.valuation_id,
+            ValuationReport.user_id,
+            ValuationReport.category,
+            ValuationReport.country_code,
+            ValuationReport.subscription_id,
+            ValuationReport.created_at,
+        )
         .filter(ValuationReport.user_id == user_id)
     )
 
@@ -183,7 +368,7 @@ def get_user_valuations(
             )
         )
 
-    total = query.count()
+    total = query.order_by(None).count()
 
     if params["limit"] is not None:
         valuations = (
@@ -198,7 +383,18 @@ def get_user_valuations(
 
     return success_response(
         data={
-            "data": valuations,
+            "data": [
+                {
+                    "id": valuation.id,
+                    "valuation_id": valuation.valuation_id,
+                    "user_id": valuation.user_id,
+                    "category": valuation.category,
+                    "country_code": valuation.country_code,
+                    "subscription_id": valuation.subscription_id,
+                    "created_at": valuation.created_at,
+                }
+                for valuation in valuations
+            ],
             "pagination": {
                 "page": params["page"],
                 "limit": params["limit"],
@@ -209,9 +405,27 @@ def get_user_valuations(
     )
 
 
-@router.delete("/valuations/{valuation_id}/delete", response_model=APIResponse[dict])
+@router.delete(
+    "/valuations/{valuation_id}/delete",
+    response_model=APIResponse[EmptyObject],
+    summary="Delete valuation",
+    description="Deletes a valuation report by its public `valuation_id`.",
+    responses={
+        200: {
+            "description": "Deletion completed.",
+            "content": {
+                "application/json": {
+                    "example": DELETE_VALUATION_EXAMPLE,
+                }
+            },
+        }
+    },
+)
 def delete_valuation(
-    valuation_id: str,
+    valuation_id: str = Path(
+        ...,
+        description="Public valuation reference such as `DV-20260325-0001`.",
+    ),
     db: Session = Depends(get_db),
     _: None = Depends(require_management),
 ):

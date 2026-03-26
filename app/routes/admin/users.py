@@ -1,6 +1,5 @@
 #app/router/admin/users.py
 
-import os
 import secrets
 from uuid import UUID
 from sqlalchemy import or_
@@ -48,7 +47,7 @@ def list_users(
     params: dict = Depends(pagination_params),
     is_email_verified: Optional[bool] = Query(None),
     is_superuser: Optional[bool] = Query(None),
-    country_id: Optional[int] = Query(None),
+    country_id: Optional[UUID] = Query(None),
     is_active: Optional[bool] = Query(None),
     verified_from: Optional[datetime] = Query(None),
     verified_to: Optional[datetime] = Query(None),
@@ -64,7 +63,16 @@ def list_users(
         f"search={params['search']}"
     )
     
-    query = db.query(User)
+    query = db.query(
+        User.id,
+        User.email,
+        User.username,
+        User.mobile_number,
+        User.role,
+        User.is_active,
+        User.is_email_verified,
+        User.is_superuser,
+    )
     
     if params["search"]:
         query = query.filter(
@@ -109,7 +117,7 @@ def list_users(
                 verified_to,
             )
 
-    total = query.count()
+    total = query.order_by(None).count()
 
     ALLOWED_SORT_FIELDS = {
         "id": User.id,
@@ -137,8 +145,20 @@ def list_users(
     )
 
     return success_response(
-    data={
-            "data": users,
+        data={
+            "data": [
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "mobile_number": user.mobile_number,
+                    "role": user.role,
+                    "is_active": user.is_active,
+                    "is_email_verified": user.is_email_verified,
+                    "is_superuser": user.is_superuser,
+                }
+                for user in users
+            ],
             "pagination": {
                 "page": params["page"],
                 "limit": params["limit"],
@@ -157,16 +177,36 @@ def get_user(
 ):
     logger.info(f"Admin fetching user user_id={user_id}")
     
-    user = db.query(User).filter(
-        User.id == user_id
-    ).first()
+    user = (
+        db.query(
+            User.id,
+            User.email,
+            User.username,
+            User.mobile_number,
+            User.role,
+            User.is_active,
+            User.is_email_verified,
+            User.is_superuser,
+        )
+        .filter(User.id == user_id)
+        .first()
+    )
 
     if not user:
         logger.warning(f"{USER_NOT_FOUND} user_id={user_id}")
         raise HTTPException(404, USER_NOT_FOUND)
 
     return success_response(
-        data=user,
+        data={
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "mobile_number": user.mobile_number,
+            "role": user.role,
+            "is_active": user.is_active,
+            "is_email_verified": user.is_email_verified,
+            "is_superuser": user.is_superuser,
+        },
         message="User fetched successfully"
     )
 

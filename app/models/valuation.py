@@ -4,9 +4,9 @@ from fastapi import Form
 from typing import Optional 
 from datetime import datetime
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Column, String, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, JSON, ForeignKey, Index
 
 from sqlalchemy.dialects.postgresql import UUID
 from app.database.mixins import UUIDPrimaryKeyMixin
@@ -16,34 +16,42 @@ from app.database.db import Base
 
 class ValuationReport(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "valuation_reports"
+    __table_args__ = (
+        Index("ix_valuation_reports_user_created_at", "user_id", "created_at"),
+        Index("ix_valuation_reports_country_created_at", "country_code", "created_at"),
+    )
     
     valuation_id = Column(String, unique=True, index=True, nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    user = relationship("User")
-    category = Column(String, nullable=False)    
-    country_code = Column(String, nullable=False)  
-    created_at = Column(DateTime, default=datetime.utcnow)
-    user_fields = Column(JSON, nullable=False)
-    ai_response = Column(JSON, nullable=False)
-    subscription_id = Column(UUID(as_uuid=True), ForeignKey("user_subscriptions.id"), nullable=False)
-    report_context = Column(JSON, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user = relationship("User", lazy="selectin")
+    category = Column(String, nullable=False, index=True)    
+    country_code = Column(String, nullable=False, index=True)  
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    user_fields = deferred(Column(JSON, nullable=False), group="valuation_payload")
+    ai_response = deferred(Column(JSON, nullable=False), group="valuation_payload")
+    subscription_id = Column(UUID(as_uuid=True), ForeignKey("user_subscriptions.id"), nullable=False, index=True)
+    report_context = deferred(Column(JSON, nullable=False), group="valuation_payload")
     
     
 class ValuationJob(UUIDPrimaryKeyMixin,Base):
     __tablename__ = "valuation_jobs"
+    __table_args__ = (
+        Index("ix_valuation_jobs_user_created_at", "user_id", "created_at"),
+        Index("ix_valuation_jobs_status_created_at", "status", "created_at"),
+    )
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    subscription_id = Column(UUID(as_uuid=True), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    subscription_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     category = Column(String, nullable=False)
-    country_code = Column(String(5), nullable=False)
+    country_code = Column(String(5), nullable=False, index=True)
 
     request_payload = Column(JSON, nullable=False)
 
-    status = Column(String, default="queued")  # queued | processing | completed | failed
-    valuation_id = Column(String, nullable=True)
+    status = Column(String, default="queued", index=True)  # queued | processing | completed | failed
+    valuation_id = Column(String, nullable=True, index=True)
     error_message = Column(String, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 

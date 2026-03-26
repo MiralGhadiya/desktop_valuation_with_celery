@@ -24,8 +24,7 @@ def save_valuation_report(db: Session, payload: dict) -> int:
         )
 
         db.add(record)
-        db.commit()
-        db.refresh(record)
+        db.flush()
         
         logger.info(
             f"Valuation report saved record_id={record.id} "
@@ -35,7 +34,5 @@ def save_valuation_report(db: Session, payload: dict) -> int:
         return record.id
     
     except Exception:
-        db.rollback()
         logger.exception("Failed to save valuation report")
         raise
-

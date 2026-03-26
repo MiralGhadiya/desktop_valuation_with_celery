@@ -1,80 +1,32 @@
 # app/deps.py
 
-from sqlalchemy.orm import Session
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, status, Query
+from typing import Optional
 from uuid import UUID
 
-from typing import Optional
+from fastapi import Depends, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+
 from app import models
-from app.models.staff import Staff
-from app.database.db import get_db
 from app.auth import decode_token
+from app.database.db import get_db
+from app.models.staff import Staff
 from app.utils.logger_config import app_logger as logger
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
 
 
-def require_management(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-):
-    
+def _get_access_subject(token: str | None) -> tuple[UUID, dict]:
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization token missing"
+            detail="Authorization token missing",
         )
 
     payload = decode_token(token)
 
     if not payload or payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    sub = payload.get("sub")
-    role = payload.get("role")
-
-    if not sub or not role:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
-
-    try:
-        entity_id = UUID(sub)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
-
-    if role == "admin":
-        admin = db.query(models.User).filter(
-            models.User.id == entity_id,
-            models.User.is_superuser == True
-        ).first()
-
-        if not admin:
-            raise HTTPException(status_code=404, detail="Admin not found")
-
-        return admin
-
-    if role == "staff":
-        staff = db.query(Staff).filter(
-            Staff.id == entity_id
-        ).first()
-
-        if not staff:
-            raise HTTPException(status_code=404, detail="Staff not found")
-
-        return staff
-
-    raise HTTPException(status_code=403, detail="Invalid role")
-
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-):
-    payload = decode_token(token)
-
-    if not payload or payload.get("type") != "access":
-        logger.warning("Invalid or expired access token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -88,15 +40,54 @@ def get_current_user(
         )
 
     try:
-        # ✅ UUID-safe conversion
-        user_id = UUID(sub)
-    except ValueError:
+        return UUID(sub), payload
+    except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
-    user = db.query(models.User).filter(models.User.id == user_id).first()
+
+def require_management(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    entity_id, payload = _get_access_subject(token)
+    role = payload.get("role")
+
+    if not role:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    if role == "admin":
+        admin = db.get(models.User, entity_id)
+
+        if not admin or not admin.is_superuser:
+            raise HTTPException(status_code=404, detail="Admin not found")
+
+        return admin
+
+    if role == "staff":
+        staff = db.get(Staff, entity_id)
+
+        if not staff:
+            raise HTTPException(status_code=404, detail="Staff not found")
+
+        return staff
+
+    raise HTTPException(status_code=403, detail="Invalid role")
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    try:
+        user_id, _ = _get_access_subject(token)
+    except HTTPException:
+        logger.warning("Invalid or expired access token")
+        raise
+
+    user = db.get(models.User, user_id)
 
     if not user:
         logger.warning(f"Authenticated user not found user_id={user_id}")
@@ -117,7 +108,6 @@ def get_current_user_optional(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Optional[models.User]:
-
     if not token:
         return None
 
@@ -140,10 +130,25 @@ def require_superuser(
 
 
 def pagination_params(
-    page: int = Query(1, ge=1),
-    limit: int | None = Query(None),
-    search: str | None = Query(None),
-    is_active: bool | None = Query(None),
+    page: int = Query(
+        1,
+        ge=1,
+        description="Page number starting from 1.",
+    ),
+    limit: int | None = Query(
+        50,
+        ge=1,
+        le=100,
+        description="Maximum records to return per page. Set to null only if the route supports unbounded results.",
+    ),
+    search: str | None = Query(
+        None,
+        description="Case-insensitive search term applied by the endpoint-specific query logic.",
+    ),
+    is_active: bool | None = Query(
+        None,
+        description="Optional active-state filter used by endpoints that support it.",
+    ),
 ):
     return {
         "page": page,
@@ -151,4 +156,3 @@ def pagination_params(
         "search": search,
         "is_active": is_active,
     }
-

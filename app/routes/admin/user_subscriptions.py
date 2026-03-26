@@ -26,6 +26,28 @@ router = APIRouter(
     tags=["admin-user-subscriptions"]
 )
 
+
+@router.get("/subscription-duration", response_model=APIResponse[dict])
+def get_subscription_duration(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_management),
+):
+    settings = db.query(SubscriptionSettings).first()
+
+    if not settings:
+        settings = SubscriptionSettings(subscription_duration_days=365)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+
+    return success_response(
+        data={
+            "subscription_duration_days": settings.subscription_duration_days,
+        },
+        message="Subscription duration fetched successfully",
+    )
+
+
 class UserSubscriptionFilters:
     def __init__(
         self,

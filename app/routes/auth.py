@@ -291,12 +291,17 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
                 status_code=400,
                 detail="This account uses Google login"
             )
-            
+
+        if not db_user:
+            logger.info(f"Login failed: user not found email={user.email}")
+            raise HTTPException(401, "Invalid credentials")
+
+        if not verify_password(user.password, db_user.hashed_password):
+            logger.info(f"Login failed: invalid password email={user.email}")
+            raise HTTPException(401, "Invalid credentials")
+
         if not db_user.is_active:
             raise HTTPException(403, "Account is inactive")
-
-        if not db_user or not verify_password(user.password, db_user.hashed_password):
-            raise HTTPException(401, "Invalid credentials")
 
         if not db_user.is_email_verified:
             raise HTTPException(403, "Please verify your email")

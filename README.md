@@ -121,9 +121,13 @@ python -m app.scripts.setup_project
 This script:
 
 - imports values from `.env` into the `system_config` table
-- imports countries from `data - data.csv.csv`
-- creates default subscription settings
-- prompts you to create the first superuser
+- then imports countries from `data - data.csv.csv`
+- then creates default subscription settings
+- then seeds these management users into the `users` table if they do not already exist:
+- `superadmin@gmail.com` / `superadmin` / `SUPER_ADMIN`
+- `admin@gmail.com` / `admin` / `ADMIN`
+
+Each bootstrap step is committed before the next one starts, so country-dependent inserts run only after country data is already stored. If matching data already exists, the script skips it safely instead of inserting duplicates.
 
 7. Start the API server.
 
@@ -165,6 +169,7 @@ This Compose stack is prepared for Linux server deployment:
 - database, Redis data, uploads, generated reports, Celery beat state, and app logs are persisted in Docker volumes
 - the API waits for PostgreSQL and Redis before starting
 - the API runs Alembic migrations automatically on startup
+- the API runs the project bootstrap automatically on startup after migrations
 
 Start everything with:
 
@@ -186,11 +191,7 @@ docker compose logs -f celery_worker
 docker compose logs -f celery_beat
 ```
 
-After the stack is up, run the one-time bootstrap inside the API container:
-
-```bash
-docker compose exec api python -m app.scripts.setup_project
-```
+The API container now bootstraps the project automatically during startup. It imports config values, then countries, then subscription settings, and finally seeds the two management users without duplicating existing data.
 
 Useful URLs with the default Compose setup:
 
@@ -229,11 +230,7 @@ Notes about the container startup flow:
 docker compose up -d --build
 ```
 
-7. Run the first-time bootstrap:
-
-```bash
-docker compose exec api python -m app.scripts.setup_project
-```
+7. Let the API container finish its automatic bootstrap after startup.
 
 8. If your server has a firewall, allow the Nginx port you configured, usually `80`.
 

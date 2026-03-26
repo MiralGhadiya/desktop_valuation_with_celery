@@ -53,6 +53,7 @@ Its behavior is:
 - wait for PostgreSQL
 - wait for Redis
 - run Alembic migrations automatically for the `api` service
+- run project bootstrap automatically for the `api` service
 - start the API, Celery worker, or Celery beat depending on container command
 
 This means:
@@ -61,7 +62,7 @@ This means:
 - you do not need to manually start Uvicorn inside the container
 - you do not need to manually run migrations on every deployment
 
-You still need to run the first-time bootstrap command once after the stack is up.
+The API container now completes bootstrap automatically after migrations during startup.
 
 ## 4. Server Requirements
 
@@ -220,20 +221,26 @@ docker compose logs -f celery_beat
 docker compose logs -f nginx
 ```
 
-## 10. First-Time Bootstrap
+## 10. Automatic Bootstrap
 
-After the stack is up, run this once:
+After the stack is up, the `api` container runs the bootstrap automatically.
+
+That bootstrap will:
+
+- import `.env` values into the `system_config` table
+- then import countries from `data - data.csv.csv`
+- then create default subscription settings
+- then seed these management users into the `users` table if they do not already exist:
+- `superadmin@gmail.com` with username `superadmin`, role `SUPER_ADMIN`, and password `superadmin`
+- `admin@gmail.com` with username `admin`, role `ADMIN`, and password `admin`
+
+Each bootstrap step is committed before the next one starts, so country-dependent rows are created only after countries are already stored. If data already exists, the bootstrap skips it safely instead of inserting duplicates.
+
+If you want to rerun the bootstrap manually:
 
 ```bash
 docker compose exec api python -m app.scripts.setup_project
 ```
-
-This command is interactive. It will:
-
-- import `.env` values into the `system_config` table
-- import countries from `data - data.csv.csv`
-- create default subscription settings
-- prompt you to create the first superuser
 
 If you only need to create a superuser later:
 
@@ -406,7 +413,7 @@ If Nginx is not reachable:
 - check `docker compose logs -f nginx`
 - verify firewall allows the configured public port
 
-If first-time setup fails:
+If automatic bootstrap fails:
 
 - make sure the containers are already up
 - confirm migrations completed successfully in API logs
@@ -424,7 +431,7 @@ For this project, the recommended production workflow is:
 2. Copy the project to the server
 3. Create `.env`
 4. Run `docker compose up -d --build`
-5. Run `docker compose exec api python -m app.scripts.setup_project`
+5. Let the API container finish automatic bootstrap
 6. Verify the app at `/docs`
 7. Add domain and SSL later
 
@@ -434,7 +441,6 @@ Initial deployment:
 
 ```bash
 docker compose up -d --build
-docker compose exec api python -m app.scripts.setup_project
 ```
 
 Check status:

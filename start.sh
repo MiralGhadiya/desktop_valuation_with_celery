@@ -57,12 +57,30 @@ run_migrations() {
   done
 }
 
+run_project_setup() {
+  attempt=1
+
+  echo "Running project setup bootstrap..."
+
+  until python -m app.scripts.setup_project; do
+    if [ "$attempt" -ge "$max_retries" ]; then
+      echo "Project setup bootstrap failed after $attempt attempts."
+      exit 1
+    fi
+
+    echo "Project setup bootstrap failed. Retrying in ${retry_delay}s..."
+    attempt=$((attempt + 1))
+    sleep "$retry_delay"
+  done
+}
+
 wait_with_retries "PostgreSQL" "wait_for_database"
 wait_with_retries "Redis" "wait_for_redis"
 
 case "$service_name" in
   api)
     run_migrations
+    run_project_setup
     echo "Starting FastAPI..."
     exec uvicorn app.main:app \
       --host 0.0.0.0 \

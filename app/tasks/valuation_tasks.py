@@ -52,6 +52,44 @@ def build_calculation_input(user_input: dict):
     }
 
 
+def get_next_valuation_sequence(db) -> int:
+    """
+    Ensure the legacy public valuation sequence exists, then return the next value.
+    The advisory lock prevents duplicate sequence bootstrapping across workers.
+    """
+    db.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": 482001})
+
+    sequence_exists = db.execute(
+        text("SELECT to_regclass('public.valuation_seq')")
+    ).scalar()
+
+    if sequence_exists is None:
+        db.execute(
+            text("CREATE SEQUENCE valuation_seq START WITH 1 INCREMENT BY 1")
+        )
+
+        max_existing_suffix = db.execute(
+            text(
+                """
+                SELECT COALESCE(
+                    MAX(CAST(split_part(valuation_id, '-', 3) AS BIGINT)),
+                    0
+                )
+                FROM valuation_reports
+                WHERE valuation_id ~ '^DV-[0-9]{8}-[0-9]+$'
+                """
+            )
+        ).scalar()
+
+        if max_existing_suffix:
+            db.execute(
+                text("SELECT setval('valuation_seq', :value, true)"),
+                {"value": int(max_existing_suffix)},
+            )
+
+    return int(db.execute(text("SELECT nextval('valuation_seq')")).scalar())
+
+
 @celery_app.task(
     bind=True,
     autoretry_for=(RuntimeError,),
@@ -137,7 +175,7 @@ def process_valuation_job(self, job_id: str):
         
         today = datetime.now(timezone.utc).strftime("%Y%m%d")
 
-        seq = db.execute(text("SELECT nextval('valuation_seq')")).scalar()
+        seq = get_next_valuation_sequence(db)
 
         valuation_id = f"DV-{today}-{seq:04d}"
                 

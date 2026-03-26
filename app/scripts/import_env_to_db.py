@@ -1,13 +1,13 @@
-from dotenv import dotenv_values
 from sqlalchemy.orm import Session
 
 from app.database.db import SessionLocal
 from app.models.system_config import SystemConfig
+from app.scripts.config_seed import load_config_seed_values
 from app.utils.logger_config import app_logger as logger
 
 
 def import_env_variables():
-    env_vars = dotenv_values(".env")
+    env_vars = load_config_seed_values()
 
     db: Session = SessionLocal()
 

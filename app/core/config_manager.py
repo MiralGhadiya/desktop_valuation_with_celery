@@ -1,5 +1,4 @@
-# app/core/config_manager.py
-
+import os
 import time
 from threading import Thread
 from sqlalchemy.orm import Session
@@ -54,6 +53,11 @@ def get_config(key: str, default=None):
         value = redis_client.hget(CONFIG_HASH, key)
 
         if value is None:
+            env_value = os.getenv(key)
+            if env_value is not None:
+                logger.debug(f"Config key '{key}' not found in Redis, using environment fallback")
+                return env_value
+
             logger.debug(f"Config key '{key}' not found, returning default")
             return default
 

@@ -38,8 +38,6 @@ def get_razorpay_client():
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 
-client = get_razorpay_client()
-
 def _pricing_country(request: Request, current_user: User) -> str:
     ip_country = getattr(request.state, "ip_country", None)
     user_country = current_user.country.country_code
@@ -138,6 +136,7 @@ def create_order(
     #     }
 
     try:
+        client = get_razorpay_client()
         order = client.order.create({
             "amount": amount,
             "currency": currency,
@@ -193,6 +192,7 @@ def verify_payment(
     current_user: User = Depends(get_current_user),
 ):
     try:
+        client = get_razorpay_client()
         client.utility.verify_payment_signature({
             "razorpay_order_id": data["razorpay_order_id"],
             "razorpay_payment_id": data["razorpay_payment_id"],

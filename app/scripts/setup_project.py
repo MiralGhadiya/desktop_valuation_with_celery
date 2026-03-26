@@ -2,17 +2,18 @@
 
 import csv
 from getpass import getpass
+
 from dotenv import dotenv_values, load_dotenv
 from sqlalchemy.orm import Session
 
-from app.database.db import SessionLocal, Base, engine
-from app.models.system_config import SystemConfig
+from app.auth import pwd_context
+from app.database.db import Base, SessionLocal, engine
+from app.models import User
 from app.models.country import Country
 from app.models.subscription_settings import SubscriptionSettings
-from app.models import User
-from app.auth import pwd_context
-from app.utils.phone import get_country_from_mobile
+from app.models.system_config import SystemConfig
 from app.utils.logger_config import app_logger as logger
+from app.utils.phone import get_country_from_mobile
 
 
 load_dotenv()
@@ -46,10 +47,18 @@ def import_env_variables(db: Session):
 
 def import_countries(db: Session, csv_path: str):
     try:
-        with open(csv_path, newline='', encoding="utf-8") as csvfile:
+        existing_dial_codes = {
+            dial_code
+            for (dial_code,) in db.query(Country.dial_code).all()
+            if dial_code
+        }
+        pending_dial_codes = set()
+
+        with open(csv_path, newline="", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
 
             for row in reader:
+                dial_code = row.get("dial_code", "").strip()
                 existing = (
                     db.query(Country)
                     .filter(Country.country_code == row["country_code"])
@@ -60,16 +69,28 @@ def import_countries(db: Session, csv_path: str):
                     print(f"Skipping existing country: {row['country_code']}")
                     continue
 
+                if dial_code and (
+                    dial_code in existing_dial_codes
+                    or dial_code in pending_dial_codes
+                ):
+                    print(
+                        f"Skipping duplicate dial code {dial_code} "
+                        f"for country {row['country_code']}"
+                    )
+                    continue
+
                 country = Country(
                     name=row["name"].strip(),
                     country_code=row["country_code"].strip(),
-                    dial_code=row.get("dial_code", "").strip(),
+                    dial_code=dial_code,
                     currency_code=row.get("currency_code", "").strip() or None,
                 )
 
                 db.add(country)
+                if dial_code:
+                    pending_dial_codes.add(dial_code)
 
-        print("✅ Countries imported")
+        print("Countries imported")
 
     except Exception as e:
         raise Exception(f"Country import failed: {e}")
@@ -89,7 +110,7 @@ def setup_subscription_settings(db: Session):
 
     db.add(settings)
 
-    print("✅ Subscription settings created (365 days)")
+    print("Subscription settings created (365 days)")
 
 
 def create_superuser(db: Session):
@@ -103,15 +124,15 @@ def create_superuser(db: Session):
     confirm_password = getpass("Confirm Password: ")
 
     if password != confirm_password:
-        print("❌ Passwords do not match")
+        print("Passwords do not match")
         return
 
     if db.query(User).filter(User.email == email).first():
-        print("❌ Email already exists")
+        print("Email already exists")
         return
 
     if db.query(User).filter(User.mobile_number == mobile_number).first():
-        print("❌ Mobile number already exists")
+        print("Mobile number already exists")
         return
 
     dial_code, country_code = get_country_from_mobile(mobile_number)
@@ -121,7 +142,7 @@ def create_superuser(db: Session):
     ).first()
 
     if not country:
-        print(f"❌ Country not found for dial code {dial_code}")
+        print(f"Country not found for dial code {dial_code}")
         return
 
     user = User(
@@ -137,19 +158,17 @@ def create_superuser(db: Session):
 
     db.add(user)
 
-    print("✅ Superuser created")
+    print("Superuser created")
 
 
 def run_setup():
     db: Session = SessionLocal()
 
     try:
-        print("🚀 Running project setup...")
+        print("Running project setup...")
 
         import_env_variables(db)
-
         import_countries(db, "data - data.csv.csv")
-
         setup_subscription_settings(db)
 
         db.commit()
@@ -158,11 +177,11 @@ def run_setup():
 
         db.commit()
 
-        print("\n🎉 Setup completed successfully!")
+        print("\nSetup completed successfully!")
 
     except Exception as e:
         db.rollback()
-        print("❌ Setup failed:", str(e))
+        print("Setup failed:", str(e))
 
     finally:
         db.close()

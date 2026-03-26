@@ -21,11 +21,25 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    inquiry_type = postgresql.ENUM(
+        'CONTACT',
+        'SERVICE',
+        name='inquiry_type',
+        create_type=True,
+    )
+    inquiry_type.create(op.get_bind(), checkfirst=True)
+    inquiry_type = postgresql.ENUM(
+        'CONTACT',
+        'SERVICE',
+        name='inquiry_type',
+        create_type=False,
+    )
+
     op.create_table(
         'inquiries',
         sa.Column(
             'type',
-            postgresql.ENUM('CONTACT', 'SERVICE', name='inquiry_type', create_type=False),
+            inquiry_type,
             nullable=False
         ),
         sa.Column('first_name', sa.VARCHAR(), nullable=False),
@@ -66,3 +80,4 @@ def downgrade() -> None:
     op.drop_table('subscription_settings')
     op.drop_index('ix_inquiries_id', table_name='inquiries')
     op.drop_table('inquiries')
+    postgresql.ENUM(name='inquiry_type').drop(op.get_bind(), checkfirst=True)

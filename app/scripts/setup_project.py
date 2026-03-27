@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth import pwd_context
@@ -28,7 +27,7 @@ SEEDED_MANAGEMENT_USERS = (
         "role": "SUPER_ADMIN",
         "username": "superadmin",
         "password": "superadmin",
-        "mobile_number": "+919876543210",
+        "mobile_number": "+919999000001",
         "country_code": "IN",
         "is_superuser": True,
     },
@@ -37,7 +36,7 @@ SEEDED_MANAGEMENT_USERS = (
         "role": "ADMIN",
         "username": "admin",
         "password": "admin",
-        "mobile_number": "+919876543211",
+        "mobile_number": "+919999000002",
         "country_code": "IN",
         "is_superuser": True,
     },
@@ -149,15 +148,48 @@ def get_country_by_code(db: Session, country_code: str) -> Country:
     return country
 
 
+def get_existing_management_user(
+    db: Session,
+    user_data: dict[str, object],
+) -> User | None:
+    return db.query(User).filter(
+        User.email == user_data["email"]
+    ).first()
+
+
+def build_mobile_number_candidate(base_mobile_number: str, offset: int) -> str:
+    prefix = "+" if base_mobile_number.startswith("+") else ""
+    digits = base_mobile_number.lstrip("+")
+
+    if digits.isdigit():
+        return f"{prefix}{int(digits) + offset}"
+
+    return f"{base_mobile_number}_{offset}"
+
+
+def get_available_mobile_number(
+    db: Session,
+    requested_mobile_number: str,
+) -> str:
+    candidate = requested_mobile_number
+    attempt = 0
+
+    while True:
+        query = db.query(User).filter(User.mobile_number == candidate)
+
+        if not query.first():
+            return candidate
+
+        attempt += 1
+        candidate = build_mobile_number_candidate(
+            requested_mobile_number,
+            attempt,
+        )
+
+
 def seed_management_users(db: Session) -> None:
     for user_data in SEEDED_MANAGEMENT_USERS:
-        existing_user = db.query(User).filter(
-            or_(
-                User.email == user_data["email"],
-                User.username == user_data["username"],
-                User.mobile_number == user_data["mobile_number"],
-            )
-        ).first()
+        existing_user = get_existing_management_user(db, user_data)
 
         if existing_user:
             logger.info(
@@ -167,12 +199,23 @@ def seed_management_users(db: Session) -> None:
             continue
 
         country = get_country_by_code(db, user_data["country_code"])
+        assigned_mobile_number = get_available_mobile_number(
+            db,
+            user_data["mobile_number"],
+        )
+
+        if assigned_mobile_number != user_data["mobile_number"]:
+            logger.warning(
+                "Configured mobile number for management user is already in use. "
+                f"Assigned fallback mobile={assigned_mobile_number} "
+                f"email={user_data['email']}"
+            )
 
         db.add(User(
             email=user_data["email"],
             role=user_data["role"],
             username=user_data["username"],
-            mobile_number=user_data["mobile_number"],
+            mobile_number=assigned_mobile_number,
             country_id=country.id,
             hashed_password=pwd_context.hash(user_data["password"]),
             is_active=True,
@@ -180,6 +223,7 @@ def seed_management_users(db: Session) -> None:
             is_email_verified=True,
             email_verified_at=datetime.now(timezone.utc),
         ))
+        db.flush()
 
         logger.info(
             "Seeded management user "

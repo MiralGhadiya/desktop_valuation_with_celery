@@ -1,6 +1,6 @@
 import os
 import time
-from threading import Thread
+from threading import Thread, Lock
 from sqlalchemy.orm import Session
 
 from app.database.db import SessionLocal
@@ -12,114 +12,111 @@ from app.utils.logger_config import app_logger as logger
 CONFIG_HASH = "system_config"
 CONFIG_CHANNEL = "config_update_channel"
 
+_reload_lock = Lock()
+_last_reload = 0
 
+
+# -------------------------
+# LOAD CONFIG (SAFE)
+# -------------------------
 def load_config():
-    logger.info("Starting config load from database")
+    global _last_reload
+
+    # prevent rapid reload
+    now = time.time()
+    if now - _last_reload < 5:
+        logger.debug("Skipping config reload (rate-limited)")
+        return
+
+    if not _reload_lock.acquire(blocking=False):
+        logger.debug("Config reload already in progress")
+        return
 
     db: Session = SessionLocal()
 
     try:
-        configs = db.query(SystemConfig).all()
+        logger.info("Loading config from DB")
 
-        if not configs:
-            logger.warning("No system configs found in database")
+        configs = db.query(
+            SystemConfig.config_key,
+            SystemConfig.config_value
+        ).all()
 
         pipe = redis_client.pipeline()
 
-        for c in configs:
-            pipe.hset(CONFIG_HASH, c.config_key, c.config_value)
+        for key, value in configs:
+            pipe.hset(CONFIG_HASH, key, value)
 
         pipe.execute()
 
-        redis_client.set(
-            "system_config_last_updated",
-            time.time()
-        )
+        redis_client.set("system_config_last_updated", now)
 
-        logger.info(
-            f"Loaded {len(configs)} configs into Redis cache"
-        )
+        _last_reload = now
+
+        logger.info(f"Loaded {len(configs)} configs into Redis")
 
     except Exception as e:
-        logger.exception(f"Failed to load configs: {e}")
+        logger.exception(f"Config load failed: {e}")
 
     finally:
         db.close()
-        logger.debug("Database session closed after config load")
+        _reload_lock.release()
 
 
+# -------------------------
+# GET CONFIG (FAST)
+# -------------------------
 def get_config(key: str, default=None):
     try:
         value = redis_client.hget(CONFIG_HASH, key)
 
         if value is None:
-            env_value = os.getenv(key)
-            if env_value is not None:
-                logger.debug(f"Config key '{key}' not found in Redis, using environment fallback")
-                return env_value
+            return os.getenv(key, default)
 
-            logger.debug(f"Config key '{key}' not found, returning default")
-            return default
-
-        logger.debug(f"Config fetch: {key}={value}")
         return value
 
     except Exception as e:
-        logger.exception(f"Redis config read failed for key={key}: {e}")
+        logger.exception(f"Redis read failed: {e}")
         return default
 
 
+# -------------------------
+# LISTENER (SAFE LOOP)
+# -------------------------
 def start_config_listener():
-    logger.info("Initializing Redis config listener")
+    logger.info("Starting config listener")
 
-    try:
-        pubsub = redis_client.pubsub()
-        pubsub.subscribe(CONFIG_CHANNEL)
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe(CONFIG_CHANNEL)
 
-        logger.info(
-            f"Subscribed to Redis channel '{CONFIG_CHANNEL}' for config updates"
-        )
-
-        for message in pubsub.listen():
-
-            if message["type"] != "message":
-                continue
-
-            logger.info(
-                f"Config update event received: {message['data']}"
-            )
-
-            load_config()
-
-    except Exception as e:
-        logger.exception(f"Config listener crashed: {e}")
-
-
-def start_listener_thread():
-    logger.info("Starting config listener thread")
-
-    def run():
+    while True:
         try:
-            start_config_listener()
-        except Exception as e:
-            logger.exception(f"Config listener thread failed: {e}")
+            message = pubsub.get_message(timeout=5)
 
+            if message and message["type"] == "message":
+                logger.info("Config update received")
+                load_config()
+
+            time.sleep(1)  # 🔥 CRITICAL
+
+        except Exception as e:
+            logger.exception(f"Listener error: {e}")
+            time.sleep(5)
+
+
+# -------------------------
+# THREAD STARTER
+# -------------------------
+def start_listener_thread():
     Thread(
-        target=run,
+        target=start_config_listener,
         daemon=True,
-        name="config-listener-thread"
+        name="config-listener"
     ).start()
 
-    logger.info("Config listener thread started successfully")
 
-
+# -------------------------
+# NOTIFY
+# -------------------------
 def notify_config_update():
-    try:
-        redis_client.publish(CONFIG_CHANNEL, "reload")
-
-        logger.info(
-            f"Published config reload event to Redis channel '{CONFIG_CHANNEL}'"
-        )
-
-    except Exception as e:
-        logger.exception(f"Failed to publish config update event: {e}")
+    redis_client.publish(CONFIG_CHANNEL, "reload")

@@ -4,6 +4,9 @@ set -e
 service_name="${1:-api}"
 max_retries="${STARTUP_MAX_RETRIES:-20}"
 retry_delay="${STARTUP_RETRY_DELAY:-3}"
+worker_concurrency="${CELERY_WORKER_CONCURRENCY:-2}"
+worker_prefetch_multiplier="${CELERY_WORKER_PREFETCH_MULTIPLIER:-1}"
+worker_max_tasks_per_child="${CELERY_WORKER_MAX_TASKS_PER_CHILD:-20}"
 
 wait_for_database() {
   python - <<'PY'
@@ -89,8 +92,11 @@ case "$service_name" in
       --forwarded-allow-ips="*"
     ;;
   worker)
-    echo "Starting Celery worker..."
-    exec celery -A app.celery_app worker -l info
+    echo "Starting Celery worker with concurrency=${worker_concurrency}, prefetch=${worker_prefetch_multiplier}, max_tasks_per_child=${worker_max_tasks_per_child}..."
+    exec celery -A app.celery_app worker -l info \
+      --concurrency "${worker_concurrency}" \
+      --prefetch-multiplier "${worker_prefetch_multiplier}" \
+      --max-tasks-per-child "${worker_max_tasks_per_child}"
     ;;
   beat)
     echo "Starting Celery beat..."

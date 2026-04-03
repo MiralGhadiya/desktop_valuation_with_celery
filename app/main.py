@@ -3,8 +3,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database.db import engine, Base
+from app.database.db import engine, Base, SessionLocal
 from app.core.config_manager import load_config, start_listener_thread
+from app.services.bootstrap_service import ensure_default_superusers
 from app.routes import auth as user_auth, valuation, subscription, payment, user_feedback, inquiry
 from app.routes.admin import (
     auth,
@@ -37,6 +38,19 @@ app = FastAPI(title="Desktop Valuation API")
 
 @app.on_event("startup")
 def startup_event():
+    db = SessionLocal()
+    try:
+        result = ensure_default_superusers(db)
+        logger.info(
+            "Default superuser bootstrap finished created=%s skipped=%s",
+            result["created"],
+            result["skipped"],
+        )
+    except Exception:
+        logger.exception("Default superuser bootstrap failed during startup")
+    finally:
+        db.close()
+
     logger.info("Loading system configuration from database...")
     load_config()
     # auto_reload(10) 

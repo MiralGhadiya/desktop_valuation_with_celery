@@ -1,17 +1,13 @@
-# app/scripts/setup_project.py
-
 import csv
-from getpass import getpass
+
 from dotenv import dotenv_values, load_dotenv
 from sqlalchemy.orm import Session
 
-from app.database.db import SessionLocal, Base, engine
-from app.models.system_config import SystemConfig
+from app.database.db import Base, SessionLocal, engine
 from app.models.country import Country
 from app.models.subscription_settings import SubscriptionSettings
-from app.models import User
-from app.auth import pwd_context
-from app.utils.phone import get_country_from_mobile
+from app.models.system_config import SystemConfig
+from app.services.bootstrap_service import ensure_default_superusers
 from app.utils.logger_config import app_logger as logger
 
 
@@ -36,17 +32,19 @@ def import_env_variables(db: Session):
             logger.info(f"Skipping existing config: {key}")
             continue
 
-        db.add(SystemConfig(
-            config_key=key,
-            config_value=value
-        ))
+        db.add(
+            SystemConfig(
+                config_key=key,
+                config_value=value,
+            )
+        )
 
         logger.info(f"Inserted config: {key}")
 
 
 def import_countries(db: Session, csv_path: str):
     try:
-        with open(csv_path, newline='', encoding="utf-8") as csvfile:
+        with open(csv_path, newline="", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
 
             for row in reader:
@@ -69,7 +67,7 @@ def import_countries(db: Session, csv_path: str):
 
                 db.add(country)
 
-        print("✅ Countries imported")
+        print("Countries imported")
 
     except Exception as e:
         raise Exception(f"Country import failed: {e}")
@@ -84,85 +82,36 @@ def setup_subscription_settings(db: Session):
 
     settings = SubscriptionSettings(
         id=1,
-        subscription_duration_days=365
+        subscription_duration_days=365,
     )
 
     db.add(settings)
 
-    print("✅ Subscription settings created (365 days)")
-
-
-def create_superuser(db: Session):
-    print("\n=== Create Superuser ===")
-
-    email = input("Email: ").strip().lower()
-    username = input("Username: ").strip()
-    mobile_number = input("Mobile number (with country code): ").strip()
-
-    password = getpass("Password: ")
-    confirm_password = getpass("Confirm Password: ")
-
-    if password != confirm_password:
-        print("❌ Passwords do not match")
-        return
-
-    if db.query(User).filter(User.email == email).first():
-        print("❌ Email already exists")
-        return
-
-    if db.query(User).filter(User.mobile_number == mobile_number).first():
-        print("❌ Mobile number already exists")
-        return
-
-    dial_code, country_code = get_country_from_mobile(mobile_number)
-
-    country = db.query(Country).filter(
-        Country.dial_code == dial_code
-    ).first()
-
-    if not country:
-        print(f"❌ Country not found for dial code {dial_code}")
-        return
-
-    user = User(
-        email=email,
-        username=username,
-        mobile_number=mobile_number,
-        country_id=country.id,
-        hashed_password=pwd_context.hash(password),
-        is_active=True,
-        is_superuser=True,
-        is_email_verified=True,
-    )
-
-    db.add(user)
-
-    print("✅ Superuser created")
+    print("Subscription settings created (365 days)")
 
 
 def run_setup():
     db: Session = SessionLocal()
 
     try:
-        print("🚀 Running project setup...")
+        print("Running project setup...")
 
         import_env_variables(db)
-
         import_countries(db, "data - data.csv.csv")
-
         setup_subscription_settings(db)
-
         db.commit()
 
-        create_superuser(db)
+        result = ensure_default_superusers(db)
+        print(
+            "Default superusers ensured "
+            f"(created={result['created']}, skipped={result['skipped']})"
+        )
 
-        db.commit()
-
-        print("\n🎉 Setup completed successfully!")
+        print("\nSetup completed successfully!")
 
     except Exception as e:
         db.rollback()
-        print("❌ Setup failed:", str(e))
+        print("Setup failed:", str(e))
 
     finally:
         db.close()

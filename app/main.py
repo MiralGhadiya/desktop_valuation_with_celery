@@ -41,7 +41,6 @@ def startup_event():
     start_listener_thread()
     logger.info("System configuration loaded")
 
-app.add_middleware(IPCountryMiddleware)
 
 @app.middleware("http")
 async def add_ngrok_header(request: Request, call_next):
@@ -61,6 +60,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(IPCountryMiddleware)
 
 # --------------------------------------------------
 # Routers (User)
